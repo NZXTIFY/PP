@@ -181,6 +181,17 @@ export function StoreProvider({ adapter, children }: { adapter: StorageAdapter; 
   const skipNextSave = useRef(true);
 
   useEffect(() => {
+    if (adapter.subscribe) {
+      // Molnet: varje ändring (även från en annan enhet) ersätter datan. Adaptern vet själv
+      // vad som redan är synkat, så den efterföljande save() skriver inget i onödan.
+      return adapter.subscribe(
+        (remote) => {
+          dispatch({ type: 'replace', data: remote });
+          setLoaded(true);
+        },
+        (err) => setSaveError(err.message),
+      );
+    }
     let cancelled = false;
     adapter.load().then((stored) => {
       if (cancelled) return;

@@ -1234,6 +1234,129 @@ button:focus-visible {
   outline: none;
 }
 
+/* ---------- Inloggning & hushåll ---------- */
+.auth-main {
+  max-width: 460px;
+  padding-top: 32px;
+}
+.auth-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.auth-tabs {
+  align-self: center;
+}
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.auth-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.85rem;
+  color: var(--text-2);
+}
+.auth-form input {
+  color: var(--text);
+  font-size: 1rem;
+  padding: 0.65rem 0.75rem;
+}
+.auth-form .checkbox {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 0.9rem;
+}
+.auth-form .checkbox input {
+  margin-top: 2px;
+}
+.auth-link {
+  align-self: center;
+  font-size: 0.9rem;
+}
+.form-note {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+.btn-block {
+  width: 100%;
+  padding: 0.7rem 1rem;
+  font-size: 1rem;
+}
+.code-input {
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.household-name {
+  margin: 6px 0 14px;
+}
+.member-list {
+  list-style: none;
+  margin: 0 0 14px;
+  padding: 0;
+}
+.member-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+}
+.member-list li:first-child {
+  border-top: 0;
+}
+.member-list .muted {
+  font-size: 0.82rem;
+}
+.badge {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  background: var(--accent-wash);
+  color: var(--accent);
+  white-space: nowrap;
+}
+.badge-muted {
+  background: var(--surface-2);
+  color: var(--text-2);
+}
+.invites {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+.invite-row {
+  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+.invite-row.is-fresh {
+  outline: 2px solid var(--accent);
+}
+.invite-code {
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  font-size: 1.1rem;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+}
+.invite-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 6px;
+}
+
 /* ---------- Inställningar ---------- */
 .person-list {
   list-style: none;

@@ -1,4 +1,5 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
+import { useCloud } from './cloud/context';
 import { useStore } from './store/store';
 import { UiProvider, useUi, type Tab } from './store/ui';
 import { MonthNav, ScopeSwitcher } from './components/ScopeBar';
@@ -61,9 +62,25 @@ function TabButtons({ withIcons }: { withIcons?: boolean }) {
   ));
 }
 
+function useOnline(): boolean {
+  const [online, setOnline] = useState(navigator.onLine);
+  useEffect(() => {
+    const update = () => setOnline(navigator.onLine);
+    window.addEventListener('online', update);
+    window.addEventListener('offline', update);
+    return () => {
+      window.removeEventListener('online', update);
+      window.removeEventListener('offline', update);
+    };
+  }, []);
+  return online;
+}
+
 function Shell() {
   const { saveError } = useStore();
   const { tab, openQuickAdd } = useUi();
+  const cloud = useCloud();
+  const online = useOnline();
 
   return (
     <div className="app">
@@ -77,6 +94,9 @@ function Shell() {
 
       <main className="main">
         {saveError && <div className="notice notice-bad">Kunde inte spara: {saveError}</div>}
+        {cloud && !online && (
+          <div className="notice">Du är offline. Ändringar sparas på enheten och synkas när du är online igen.</div>
+        )}
         {tab !== 'installningar' && (
           <div className="controls">
             <ScopeSwitcher />

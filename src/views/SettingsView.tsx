@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import type { MonthBudget, Person } from '../types';
+import { useCloud } from '../cloud/context';
 import { useStore } from '../store/store';
 import { useUi } from '../store/ui';
 import { useToast } from '../components/Toast';
@@ -11,9 +12,18 @@ import { num } from '../lib/format';
 import { periodLabel, rangeLabel, currentPeriod } from '../lib/period';
 import type { ImportedSheet } from '../import/excel';
 
+// Laddas bara när appen är inloggad mot molnet (drar in Firebase)
+const CloudSettings = lazy(() => import('../cloud/CloudSettings'));
+
 export function SettingsView() {
+  const cloud = useCloud();
   return (
     <>
+      {cloud && (
+        <Suspense fallback={null}>
+          <CloudSettings />
+        </Suspense>
+      )}
       <PersonsCard />
       <PeriodCard />
       <ThemeCard />
@@ -270,6 +280,7 @@ export function ExcelImportCard() {
 
 function BackupCard() {
   const { data, dispatch } = useStore();
+  const cloud = useCloud();
   const toast = useToast();
 
   function exportJson() {
@@ -296,40 +307,48 @@ function BackupCard() {
   }
 
   function wipe() {
-    if (!confirm('Radera ALL budgetdata i den här webbläsaren?')) return;
+    const where = cloud ? 'för hela hushållet, för alla medlemmar' : 'i den här webbläsaren';
+    if (!confirm(`Radera ALL budgetdata ${where}?`)) return;
     const before = data;
     dispatch({ type: 'replace', data: emptyData() });
     toast('All data raderad', { undo: () => dispatch({ type: 'replace', data: before }) });
   }
 
   const months = Object.keys(data.months).length;
+  // I molnet påverkar återställning och radering alla i hushållet – bara ägaren får göra det
+  const canReplace = !cloud || cloud.isOwner;
 
   return (
     <section className="card">
       <h2>Lagring & backup</h2>
       <p className="muted">
-        Allt sparas just nu bara i den här webbläsaren ({months} månader, {data.transactions.length} köp). Exportera en
-        backup då och då, eller för att flytta datan till en annan enhet.
+        {cloud
+          ? `Budgetarna synkas i molnet för hela hushållet (${months} månader, ${data.transactions.length} köp) och fungerar även offline. En egen backup kan ändå vara bra att ha.`
+          : `Allt sparas just nu bara i den här webbläsaren (${months} månader, ${data.transactions.length} köp). Exportera en backup då och då, eller för att flytta datan till en annan enhet.`}
       </p>
       <div className="details-actions">
         <button className="btn" onClick={exportJson}>
           Exportera backup
         </button>
-        <label className="btn file-btn">
-          Återställ backup
-          <input
-            type="file"
-            accept="application/json,.json"
-            onChange={(e) => {
-              importJson(e.target.files?.[0]);
-              e.target.value = '';
-            }}
-            hidden
-          />
-        </label>
-        <button className="btn btn-ghost btn-danger" onClick={wipe}>
-          Radera all data
-        </button>
+        {canReplace && (
+          <>
+            <label className="btn file-btn">
+              Återställ backup
+              <input
+                type="file"
+                accept="application/json,.json"
+                onChange={(e) => {
+                  importJson(e.target.files?.[0]);
+                  e.target.value = '';
+                }}
+                hidden
+              />
+            </label>
+            <button className="btn btn-ghost btn-danger" onClick={wipe}>
+              Radera all data
+            </button>
+          </>
+        )}
       </div>
     </section>
   );

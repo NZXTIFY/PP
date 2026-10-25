@@ -1,0 +1,91 @@
+rules_version = '2';
+
+// Säkerhetsregler för budgetappen.
+// Klistra in i Firebase-konsolen (Firestore → Regler) eller kör:
+//   npx firebase-tools deploy --only firestore:rules --project <projekt-id>
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function householdPath(hid) {
+      return /databases/$(database)/documents/households/$(hid);
+    }
+
+    function isMember(hid) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/households/$(hid)/members/$(request.auth.uid));
+    }
+
+    function isOwner(hid) {
+      return signedIn() && get(householdPath(hid)).data.ownerId == request.auth.uid;
+    }
+
+    function validInvite(hid, code) {
+      let path = /databases/$(database)/documents/invites/$(code);
+      return code is string
+        && exists(path)
+        && get(path).data.householdId == hid
+        && get(path).data.expiresAt > request.time;
+    }
+
+    // Egen profil: namn och vilket hushåll man tillhör
+    match /users/{uid} {
+      allow read, write: if signedIn() && request.auth.uid == uid;
+    }
+
+    // Inbjudningar slås upp med koden. Listning är inte tillåten, så man måste känna till koden.
+    match /invites/{code} {
+      allow get: if signedIn();
+      allow create: if isOwner(request.resource.data.householdId)
+        && request.resource.data.createdBy == request.auth.uid;
+      allow delete: if isOwner(resource.data.householdId);
+    }
+
+    match /households/{hid} {
+      allow read: if isMember(hid);
+      allow create: if signedIn() && request.resource.data.ownerId == request.auth.uid;
+      // Medlemmar får ändra budgetinställningar och personer, bara ägaren byter namn.
+      // Ägarskapet kan inte flyttas.
+      allow update: if isMember(hid)
+        && request.resource.data.ownerId == resource.data.ownerId
+        && (isOwner(hid) || request.resource.data.name == resource.data.name);
+      allow delete: if isOwner(hid);
+
+      match /members/{uid} {
+        // Man får alltid kolla sitt eget medlemskap (även om man tagits bort)
+        allow get: if signedIn() && request.auth.uid == uid;
+        allow read: if isMember(hid);
+        allow create: if signedIn() && request.auth.uid == uid && (
+          // Ägaren, i samma skrivning som hushållet skapas
+          (request.resource.data.role == 'owner'
+            && getAfter(householdPath(hid)).data.ownerId == request.auth.uid)
+          ||
+          // Alla andra behöver en giltig inbjudan till just det här hushållet
+          (request.resource.data.role == 'member'
+            && validInvite(hid, request.resource.data.inviteCode))
+        );
+        allow update: if false;
+        // Ägaren tar bort andra; medlemmar kan lämna själva. Ägaren kan inte ta bort sig själv.
+        allow delete: if (isOwner(hid) && uid != request.auth.uid)
+          || (signedIn() && uid == request.auth.uid && !isOwner(hid));
+      }
+
+      // Ägarens lista över aktiva inbjudningar
+      match /invites/{code} {
+        allow read, delete: if isOwner(hid);
+        allow create: if isOwner(hid) && request.resource.data.householdId == hid;
+      }
+
+      match /months/{id} {
+        allow read, write: if isMember(hid);
+      }
+
+      match /transactions/{id} {
+        allow read, write: if isMember(hid);
+      }
+    }
+  }
+}

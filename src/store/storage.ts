@@ -1,13 +1,15 @@
 import type { AppData } from '../types';
 
 /**
- * Allt som läser/skriver data går genom ett StorageAdapter. I dag sparas allt lokalt i
- * webbläsaren; för att flytta till Firebase räcker det att skriva en FirestoreAdapter med
- * samma två metoder och byta ut den i main.tsx.
+ * Allt som läser/skriver data går genom ett StorageAdapter: LocalStorageAdapter när appen
+ * körs utan inloggning, FirestoreAdapter (src/cloud/firestoreAdapter.ts) när den är kopplad
+ * till ett hushåll i molnet.
  */
 export interface StorageAdapter {
   load(): Promise<AppData | null>;
   save(data: AppData): Promise<void>;
+  /** Realtidsuppdateringar (t.ex. från en annan enhet). Ersätter load() om den finns. */
+  subscribe?(onData: (data: AppData) => void, onError: (err: Error) => void): () => void;
 }
 
 export function emptyData(): AppData {
