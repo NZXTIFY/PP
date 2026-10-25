@@ -1,0 +1,14 @@
+node_modules
+dist
+*.local
+.vite
+
+# Egen ekonomidata ska aldrig hamna i ett publikt repo
+*.xlsx
+*.xls
+*.csv
+budget-backup*.json
+
+.DS_Store
+.idea
+.vscode
