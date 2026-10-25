@@ -1,15 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
-import type { SectionId } from '../types';
+import type { Line, SectionId } from '../types';
 import { HOUSEHOLD } from '../types';
 import { useStore } from '../store/store';
 import { useUi, type QuickAddState } from '../store/ui';
 import { useToast } from './Toast';
 import { personMonth, previousMonth } from '../lib/calc';
 import { templateLines } from '../lib/defaults';
-import { evaluate } from '../lib/expr';
-import { newId } from '../lib/id';
+import { evalOr0, evaluate } from '../lib/expr';
+import { monthId, newId } from '../lib/id';
 import { num } from '../lib/format';
 import { periodLabel, periodOf, rangeLabel, todayISO } from '../lib/period';
+import { evenPercents, incomePercents, splitAmount } from '../lib/split';
+import { setPrefs, usePrefs } from '../lib/prefs';
 
 const ORDER: { id: SectionId; title: string }[] = [
   { id: 'variable', title: 'Rörliga' },
@@ -27,10 +29,21 @@ export function QuickAdd() {
 function QuickAddSheet({ initial, onClose }: { initial: QuickAddState; onClose(): void }) {
   const { data, dispatch } = useStore();
   const { scope } = useUi();
+  const prefs = usePrefs();
   const toast = useToast();
   const startDay = data.settings.periodStartDay;
+  const persons = data.persons;
+  const multi = persons.length > 1;
 
-  const [personId, setPersonId] = useState(scope !== HOUSEHOLD ? scope : (data.persons[0]?.id ?? ''));
+  // Vem köpet gäller: en person eller hela hushållet (delas mellan alla)
+  const [target, setTarget] = useState(
+    scope === HOUSEHOLD ? (multi ? HOUSEHOLD : (persons[0]?.id ?? '')) : scope,
+  );
+  const [percents, setPercents] = useState<number[]>(() => {
+    const saved = persons.map((p) => prefs.split[p.id]);
+    const ok = saved.every((n) => typeof n === 'number') && saved.reduce((a, b) => a + b, 0) === 100;
+    return ok ? saved : evenPercents(persons.length || 1);
+  });
   const [amount, setAmount] = useState('');
   const [lineKey, setLineKey] = useState(initial.lineKey ?? '');
   const [note, setNote] = useState('');
@@ -44,38 +57,74 @@ function QuickAddSheet({ initial, onClose }: { initial: QuickAddState; onClose()
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
+  const shared = target === HOUSEHOLD;
   const period = periodOf(date || todayISO(), startDay);
-  const month = personMonth(data, personId, period);
-  const prev = month ? undefined : previousMonth(data, personId, period);
-  const lines = month?.lines ?? prev?.lines ?? templateLines();
+
+  // Budgetmånad (eller den som ska kopieras fram) för varje berörd person
+  const targets = (shared ? persons.map((p) => p.id) : [target]).map((pid) => {
+    const month = personMonth(data, pid, period);
+    const prev = month ? undefined : previousMonth(data, pid, period);
+    return { pid, month, prev, lines: month?.lines ?? prev?.lines ?? templateLines() };
+  });
+
+  // Kategorier: alla rader som finns hos någon av de berörda
+  const lines: Line[] = [];
+  for (const t of targets) for (const l of t.lines) if (!lines.some((x) => x.key === l.key)) lines.push(l);
+
   const value = evaluate(amount);
   const selected = lines.find((l) => l.key === lineKey);
-  const canSave = value !== null && value !== 0 && !!selected && !!personId;
+  const percentSum = percents.reduce((a, b) => a + b, 0);
+  const canSave = value !== null && value !== 0 && !!selected && !!target && (!shared || percentSum === 100);
+  const parts = shared && value ? splitAmount(value, percents.map((p) => p / 100)) : [];
 
-  // Visa rörliga direkt; övriga sektioner bakom en knapp så listan hålls kort.
-  const preselectedSection = selected?.section;
-  const sections = ORDER.filter(
-    (s) => s.id === 'variable' || showAllSections || s.id === preselectedSection,
+  const incomes = targets.map((t) =>
+    t.lines.filter((l) => l.section === 'income').reduce((s, l) => s + evalOr0(l.budget), 0),
   );
+  const byIncome = shared ? incomePercents(incomes) : null;
+
+  const preselectedSection = selected?.section;
+  const sections = ORDER.filter((s) => s.id === 'variable' || showAllSections || s.id === preselectedSection);
 
   function save(again: boolean) {
     if (!canSave || !selected) return;
-    if (!month) dispatch({ type: 'createMonth', personId, period, from: prev });
-    dispatch({
-      type: 'addTransaction',
-      tx: {
-        id: newId(),
-        personId,
-        period,
-        lineKey: selected.key,
-        amount: value!,
-        date,
-        note: note.trim(),
-        createdAt: new Date().toISOString(),
-      },
+    const amounts = shared ? parts : [value!];
+    const splitId = shared ? newId() : undefined;
+    const created: string[] = [];
+
+    targets.forEach((t, i) => {
+      if (shared && amounts[i] === 0) return;
+      if (!t.month) {
+        dispatch({ type: 'createMonth', personId: t.pid, period, from: t.prev });
+        created.push(persons.find((p) => p.id === t.pid)?.name ?? '');
+      }
+      dispatch({
+        type: 'ensureLine',
+        monthId: monthId(t.pid, period),
+        key: selected.key,
+        section: selected.section,
+        name: selected.name,
+      });
+      dispatch({
+        type: 'addTransaction',
+        tx: {
+          id: newId(),
+          personId: t.pid,
+          period,
+          lineKey: selected.key,
+          amount: amounts[i],
+          date,
+          note: note.trim(),
+          createdAt: new Date().toISOString(),
+          splitId,
+          share: shared ? percents[i] / 100 : undefined,
+        },
+      });
     });
-    const created = month ? '' : ` – ${periodLabel(period)} skapad`;
-    toast(`${num(value!)} kr på ${selected.name}${created}`);
+
+    if (shared) setPrefs({ split: Object.fromEntries(persons.map((p, i) => [p.id, percents[i]])) });
+    const split = shared ? ` – delat ${percents.join('/')}` : '';
+    const createdText = created.length ? ` – ${periodLabel(period)} skapad` : '';
+    toast(`${num(value!)} kr på ${selected.name}${split}${createdText}`);
     if (again) {
       setAmount('');
       setNote('');
@@ -126,20 +175,92 @@ function QuickAddSheet({ initial, onClose }: { initial: QuickAddState; onClose()
             <p className="form-hint">= {num(value)} kr</p>
           )}
 
-          {data.persons.length > 1 && (
-            <div className="segmented segmented-small" role="radiogroup" aria-label="Vems köp">
-              {data.persons.map((p) => (
+          {multi && (
+            <div className="segmented segmented-small who" role="radiogroup" aria-label="Vems köp">
+              {persons.map((p) => (
                 <button
                   type="button"
                   key={p.id}
                   role="radio"
-                  aria-checked={personId === p.id}
-                  className={personId === p.id ? 'is-active' : ''}
-                  onClick={() => setPersonId(p.id)}
+                  aria-checked={target === p.id}
+                  className={target === p.id ? 'is-active' : ''}
+                  onClick={() => setTarget(p.id)}
                 >
                   {p.name}
                 </button>
               ))}
+              <button
+                type="button"
+                role="radio"
+                aria-checked={shared}
+                className={shared ? 'is-active' : ''}
+                onClick={() => setTarget(HOUSEHOLD)}
+              >
+                Hushåll
+              </button>
+            </div>
+          )}
+
+          {shared && (
+            <div className="split">
+              <div className="split-parts">
+                {persons.map((p, i) => (
+                  <div key={p.id} className="split-part">
+                    <span className="split-name">{p.name}</span>
+                    <strong>{percents[i]} %</strong>
+                    <span className="muted">{value ? `${num(parts[i] ?? 0)} kr` : '–'}</span>
+                  </div>
+                ))}
+              </div>
+
+              {persons.length === 2 ? (
+                <input
+                  type="range"
+                  className="split-slider"
+                  min={0}
+                  max={100}
+                  step={1}
+                  value={percents[0]}
+                  aria-label={`${persons[0].name}s andel i procent`}
+                  aria-valuetext={`${persons[0].name} ${percents[0]} %, ${persons[1].name} ${percents[1]} %`}
+                  onChange={(e) => {
+                    // Snäpp till jämna femtal (40/60, 45/55) när man är nära – lätt att träffa med tummen
+                    const raw = Number(e.target.value);
+                    const round = Math.round(raw / 5) * 5;
+                    const v = Math.abs(raw - round) <= 1 ? round : raw;
+                    setPercents([v, 100 - v]);
+                  }}
+                />
+              ) : (
+                <div className="split-inputs">
+                  {persons.map((p, i) => (
+                    <label key={p.id}>
+                      {p.name}
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        value={percents[i]}
+                        onChange={(e) =>
+                          setPercents(percents.map((x, j) => (j === i ? Math.max(0, Math.min(100, Number(e.target.value) || 0)) : x)))
+                        }
+                      />
+                    </label>
+                  ))}
+                </div>
+              )}
+              {percentSum !== 100 && <p className="form-error">Andelarna blir {percentSum} %, de måste bli 100 %.</p>}
+
+              <div className="split-presets">
+                <button type="button" className="chip" onClick={() => setPercents(evenPercents(persons.length))}>
+                  Lika ({evenPercents(persons.length).join('/')})
+                </button>
+                {byIncome && (
+                  <button type="button" className="chip" onClick={() => setPercents(byIncome)}>
+                    Efter inkomst ({byIncome.join('/')})
+                  </button>
+                )}
+              </div>
             </div>
           )}
 
@@ -183,7 +304,7 @@ function QuickAddSheet({ initial, onClose }: { initial: QuickAddState; onClose()
           </div>
           <p className="form-hint">
             Räknas till <strong>{periodLabel(period)}</strong> ({rangeLabel(period, startDay)})
-            {!month && ' – budgeten skapas automatiskt från föregående månad'}
+            {targets.some((t) => !t.month) && ' – budgeten skapas automatiskt från föregående månad'}
           </p>
 
           <div className="sheet-actions">

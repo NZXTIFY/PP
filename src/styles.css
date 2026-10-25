@@ -1234,6 +1234,118 @@ button:focus-visible {
   outline: none;
 }
 
+/* ---------- Visningsval på budgetsidan ---------- */
+.budget-view {
+  display: contents;
+}
+.view-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.btn-small {
+  padding: 0.3rem 0.7rem;
+  font-size: 0.85rem;
+}
+.tile-picker {
+  flex-basis: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+.tile-picker .checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.92rem;
+}
+.tile-picker .checkbox.is-disabled {
+  color: var(--text-muted);
+}
+.checkbox-note {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+.budget-only .line-head,
+.budget-only .line {
+  grid-template-columns: minmax(0, 1fr) 8rem;
+}
+
+/* ---------- Delade hushållsköp ---------- */
+.who {
+  align-self: center;
+}
+.split {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--surface-2);
+}
+.split-parts {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.split-part {
+  display: flex;
+  flex-direction: column;
+  font-variant-numeric: tabular-nums;
+}
+.split-part:last-child {
+  align-items: flex-end;
+  text-align: right;
+}
+.split-parts:has(.split-part:nth-child(3)) .split-part:last-child {
+  align-items: flex-start;
+  text-align: left;
+}
+.split-name {
+  font-size: 0.8rem;
+  color: var(--text-2);
+}
+.split-part strong {
+  font-size: 1.15rem;
+}
+.split-slider {
+  width: 100%;
+  accent-color: var(--accent);
+  height: 28px;
+  cursor: pointer;
+}
+.split-inputs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.split-inputs label {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.8rem;
+  color: var(--text-2);
+}
+.split-inputs input {
+  width: 5.5em;
+}
+.split-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.tx-badge {
+  margin-left: 6px;
+  font-size: 0.68rem;
+  vertical-align: 1px;
+}
+
 /* ---------- Inloggning & hushåll ---------- */
 .auth-main {
   max-width: 460px;

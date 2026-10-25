@@ -16,6 +16,8 @@ export type Action =
   | { type: 'deleteMonth'; personId: string; period: Period }
   | { type: 'updateLine'; monthId: string; lineId: string; patch: LinePatch }
   | { type: 'addLine'; monthId: string; section: SectionId; name: string }
+  /** Lägger till raden med exakt den nyckeln om den saknas (t.ex. för ett delat köp). */
+  | { type: 'ensureLine'; monthId: string; key: string; section: SectionId; name: string }
   | { type: 'removeLine'; monthId: string; lineId: string }
   | { type: 'moveLine'; monthId: string; lineId: string; dir: -1 | 1 }
   | { type: 'fillActuals'; monthId: string; lineIds: string[] }
@@ -99,6 +101,18 @@ function reducer(state: AppData, action: Action): AppData {
         lines.splice(lastIdx === -1 ? lines.length : lastIdx + 1, 0, line);
         return { ...m, lines };
       });
+
+    case 'ensureLine': {
+      const month = state.months[action.monthId];
+      if (!month || month.lines.some((l) => l.key === action.key)) return state;
+      return withMonth(state, action.monthId, (m) => {
+        const line = { ...makeLine(action.section, action.name), key: action.key };
+        const lastIdx = m.lines.map((l) => l.section).lastIndexOf(action.section);
+        const lines = [...m.lines];
+        lines.splice(lastIdx === -1 ? lines.length : lastIdx + 1, 0, line);
+        return { ...m, lines };
+      });
+    }
 
     case 'removeLine': {
       const month = state.months[action.monthId];

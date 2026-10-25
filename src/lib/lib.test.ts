@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { evaluate, isFormula } from './expr';
 import { addMonths, parseMonthWord, periodOf, periodRange, rangeLabel } from './period';
 import { computeLines, deviation, mergeLines, summarize } from './calc';
+import { evenPercents, incomePercents, splitAmount } from './split';
 import type { MonthBudget } from '../types';
 
 describe('evaluate', () => {
@@ -53,6 +54,21 @@ describe('period', () => {
     expect(parseMonthWord('sept')).toBe(9);
     expect(parseMonthWord('okt')).toBe(10);
     expect(parseMonthWord('Pelle')).toBeNull();
+  });
+});
+
+describe('split', () => {
+  it('delar exakt, även när det inte går jämnt ut', () => {
+    expect(splitAmount(1000, [0.4, 0.6])).toEqual([400, 600]);
+    expect(splitAmount(99.99, [0.5, 0.5])).toEqual([50, 49.99]);
+    const three = splitAmount(100, [1 / 3, 1 / 3, 1 / 3]);
+    expect(three.reduce((a, b) => a + b, 0)).toBeCloseTo(100, 10);
+  });
+  it('procentsatser summerar alltid till 100', () => {
+    expect(evenPercents(2)).toEqual([50, 50]);
+    expect(evenPercents(3)).toEqual([33, 33, 34]);
+    expect(incomePercents([31266, 36628])).toEqual([46, 54]);
+    expect(incomePercents([0, 1000])).toBeNull();
   });
 });
 

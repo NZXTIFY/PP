@@ -7,6 +7,8 @@ import { deviation, isExpense, lineHistory, type CLine } from '../lib/calc';
 import { num, kr } from '../lib/format';
 import { addMonths, periodsBetween, shortLabel } from '../lib/period';
 import { AmountInput } from './AmountInput';
+import { splitGroup } from '../lib/split';
+import { usePrefs } from '../lib/prefs';
 
 /** Kort statustext under radnamnet, t.ex. "450 kvar" eller "1 203 över". */
 export function lineStatus(l: CLine): { text: string; cls: string } | null {
@@ -25,11 +27,12 @@ export function lineStatus(l: CLine): { text: string; cls: string } | null {
 
 export function LineRow({ month, line }: { month: MonthBudget; line: CLine }) {
   const { dispatch } = useStore();
+  const { showActual } = usePrefs();
   const [open, setOpen] = useState(false);
   const raw = line.line!;
-  const status = lineStatus(line);
+  const status = showActual ? lineStatus(line) : null;
   const ratio = line.budget > 0 ? line.actual / line.budget : 0;
-  const showBar = isExpense(line.section) && line.hasActual && line.budget > 0;
+  const showBar = showActual && isExpense(line.section) && line.hasActual && line.budget > 0;
 
   const update = (patch: Partial<typeof raw>) =>
     dispatch({ type: 'updateLine', monthId: month.id, lineId: raw.id, patch });
@@ -50,14 +53,16 @@ export function LineRow({ month, line }: { month: MonthBudget; line: CLine }) {
           )}
         </button>
         <AmountInput label={`${raw.name}, budget`} value={raw.budget} onCommit={(v) => update({ budget: v })} placeholder="0" />
-        <AmountInput
-          label={`${raw.name}, faktiskt`}
-          value={raw.actual}
-          extra={line.logged}
-          onCommit={(v) => update({ actual: v })}
-          placeholder="–"
-          className="is-actual"
-        />
+        {showActual && (
+          <AmountInput
+            label={`${raw.name}, faktiskt`}
+            value={raw.actual}
+            extra={line.logged}
+            onCommit={(v) => update({ actual: v })}
+            placeholder="–"
+            className="is-actual"
+          />
+        )}
       </div>
       {open && <LineDetails month={month} line={line} onClose={() => setOpen(false)} />}
     </div>
@@ -155,15 +160,19 @@ function LineDetails({ month, line, onClose }: { month: MonthBudget; line: CLine
             {txs.map((t) => (
               <li key={t.id}>
                 <span>{t.date.slice(5).replace('-', '/')}</span>
-                <span className="tx-note">{t.note || '–'}</span>
+                <span className="tx-note">
+                  {[t.note, t.splitId ? `delat, ${Math.round((t.share ?? 0) * 100)} %` : ''].filter(Boolean).join(' · ') || '–'}
+                </span>
                 <span className="tx-amount">{num(t.amount)}</span>
                 <button
                   className="icon-btn"
-                  aria-label="Ta bort köp"
+                  aria-label={t.splitId ? 'Ta bort delat köp' : 'Ta bort köp'}
                   onClick={() => {
                     const before = data;
-                    dispatch({ type: 'removeTransaction', id: t.id });
-                    toast('Köp borttaget', { undo: () => dispatch({ type: 'replace', data: before }) });
+                    for (const part of splitGroup(data.transactions, t)) dispatch({ type: 'removeTransaction', id: part.id });
+                    toast(t.splitId ? 'Delat köp borttaget för alla' : 'Köp borttaget', {
+                      undo: () => dispatch({ type: 'replace', data: before }),
+                    });
                   }}
                 >
                   ×

@@ -19,17 +19,71 @@ import { SECTIONS } from '../lib/defaults';
 import { kr, num } from '../lib/format';
 import { periodLabel, shortLabel } from '../lib/period';
 import { monthId } from '../lib/id';
-import { Delta, SummaryTiles } from '../components/SummaryTiles';
+import { Delta, SummaryTiles, TILE_OPTIONS } from '../components/SummaryTiles';
+import { setPrefs, usePrefs } from '../lib/prefs';
 import { LineRow, lineStatus } from '../components/LineRow';
 
 export function BudgetView() {
   const { data } = useStore();
   const { scope, period } = useUi();
+  const { showActual } = usePrefs();
 
-  if (scope === HOUSEHOLD) return <HouseholdBudget period={period} />;
-  const month = personMonth(data, scope, period);
-  if (!month) return <CreateMonth personId={scope} period={period} />;
-  return <MonthEditor month={month} />;
+  const month = scope === HOUSEHOLD ? undefined : personMonth(data, scope, period);
+  if (scope !== HOUSEHOLD && !month) return <CreateMonth personId={scope} period={period} />;
+
+  return (
+    <div className={`budget-view ${showActual ? '' : 'budget-only'}`}>
+      <ViewBar />
+      {month ? <MonthEditor month={month} /> : <HouseholdBudget period={period} />}
+    </div>
+  );
+}
+
+/** Visa/dölj Faktiskt och välj vilka summeringsrutor som syns. Sparas per enhet. */
+function ViewBar() {
+  const { showActual, hiddenTiles } = usePrefs();
+  const [open, setOpen] = useState(false);
+
+  const toggleTile = (id: string) =>
+    setPrefs({ hiddenTiles: hiddenTiles.includes(id) ? hiddenTiles.filter((t) => t !== id) : [...hiddenTiles, id] });
+
+  return (
+    <div className="view-bar">
+      <div className="segmented segmented-small" role="radiogroup" aria-label="Visa">
+        <button role="radio" aria-checked={showActual} className={showActual ? 'is-active' : ''} onClick={() => setPrefs({ showActual: true })}>
+          Budget och utfall
+        </button>
+        <button role="radio" aria-checked={!showActual} className={!showActual ? 'is-active' : ''} onClick={() => setPrefs({ showActual: false })}>
+          Bara budget
+        </button>
+      </div>
+      <button className="btn btn-ghost btn-small" aria-expanded={open} onClick={() => setOpen(!open)}>
+        {open ? 'Klar' : 'Anpassa rutor'}
+      </button>
+      {open && (
+        <div className="tile-picker">
+          <span className="details-label">Visa rutor överst</span>
+          {TILE_OPTIONS.map((t) => (
+            <label key={t.id} className={`checkbox ${t.actual && !showActual ? 'is-disabled' : ''}`}>
+              <input type="checkbox" checked={!hiddenTiles.includes(t.id)} onChange={() => toggleTile(t.id)} />
+              <span>
+                {t.label}
+                {t.actual && !showActual && <small className="checkbox-note">Visas bara i läget Budget och utfall</small>}
+              </span>
+            </label>
+          ))}
+          <div className="details-actions">
+            <button className="btn btn-small" onClick={() => setPrefs({ hiddenTiles: [] })}>
+              Visa alla
+            </button>
+            <button className="btn btn-small" onClick={() => setPrefs({ hiddenTiles: TILE_OPTIONS.map((t) => t.id) })}>
+              Dölj alla
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function CreateMonth({ personId, period }: { personId: string; period: Period }) {
@@ -131,13 +185,14 @@ function SectionCard({
   lines: CLine[];
 }) {
   const { dispatch } = useStore();
+  const { showActual } = usePrefs();
   const toast = useToast();
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState('');
   const mine = lines.filter((l) => l.section === section);
   const budget = mine.reduce((s, l) => s + l.budget, 0);
   const actual = mine.reduce((s, l) => s + l.actual, 0);
-  const hasActual = mine.some((l) => l.hasActual);
+  const hasActual = showActual && mine.some((l) => l.hasActual);
   const unfilled = mine.filter((l) => !l.hasActual && l.budget !== 0);
 
   function fillAll() {
@@ -173,7 +228,7 @@ function SectionCard({
       <div className="line-head" aria-hidden>
         <span>Kategori</span>
         <span>Budget</span>
-        <span>Faktiskt</span>
+        {showActual && <span>Faktiskt</span>}
       </div>
       {mine.map((l) => (
         <LineRow key={l.line!.id} month={month} line={l} />
@@ -206,7 +261,7 @@ function SectionCard({
             + Ny rad
           </button>
         )}
-        {unfilled.length > 0 && section !== 'variable' && (
+        {showActual && unfilled.length > 0 && section !== 'variable' && (
           <button className="btn btn-ghost" onClick={fillAll} title="Sätt faktiskt = budget på rader som saknar utfall">
             ✓ Resten enligt budget ({unfilled.length})
           </button>
@@ -219,6 +274,7 @@ function SectionCard({
 function HouseholdBudget({ period }: { period: Period }) {
   const { data } = useStore();
   const { setScope } = useUi();
+  const { showActual } = usePrefs();
   const lines = linesFor(data, HOUSEHOLD, period);
   const perPerson = data.persons.map((p) => {
     const month = data.months[monthId(p.id, period)];
@@ -266,7 +322,7 @@ function HouseholdBudget({ period }: { period: Period }) {
                 <th>Utgifter</th>
                 <th>Sparande</th>
                 <th>Över/under (plan)</th>
-                <th>Över/under (utfall/prognos)</th>
+                {showActual && <th>Över/under (utfall/prognos)</th>}
               </tr>
             </thead>
             <tbody>
@@ -279,7 +335,7 @@ function HouseholdBudget({ period }: { period: Period }) {
                     <td>{num(s!.spending.budget)}</td>
                     <td>{num(s!.sections.savings.budget)}</td>
                     <td>{num(s!.result.budget)}</td>
-                    <td>{s!.hasActuals ? num(s!.forecast.result) : '–'}</td>
+                    {showActual && <td>{s!.hasActuals ? num(s!.forecast.result) : '–'}</td>}
                   </tr>
                 ))}
             </tbody>
@@ -298,10 +354,10 @@ function HouseholdBudget({ period }: { period: Period }) {
             <div className="line-head" aria-hidden>
               <span>Kategori</span>
               <span>Budget</span>
-              <span>Faktiskt</span>
+              {showActual && <span>Faktiskt</span>}
             </div>
             {mine.map((l) => {
-              const st = lineStatus(l);
+              const st = showActual ? lineStatus(l) : null;
               return (
                 <div key={l.key} className="line is-readonly">
                   <div className="line-name">
@@ -309,7 +365,7 @@ function HouseholdBudget({ period }: { period: Period }) {
                     {st && <span className={`line-sub ${st.cls}`}>{st.text}</span>}
                   </div>
                   <span className="amount-static">{num(l.budget)}</span>
-                  <span className="amount-static">{l.hasActual ? num(l.actual) : ''}</span>
+                  {showActual && <span className="amount-static">{l.hasActual ? num(l.actual) : ''}</span>}
                 </div>
               );
             })}

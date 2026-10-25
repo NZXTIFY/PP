@@ -36,6 +36,10 @@ export interface Transaction {
   date: string;
   note: string;
   createdAt: string;
+  /** Delat hushållsköp: alla delar har samma splitId, en transaktion per person. */
+  splitId?: string;
+  /** Personens andel av det delade köpet, 0–1. */
+  share?: number;
 }
 
 export interface Person {
