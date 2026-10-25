@@ -3,6 +3,7 @@ import { useStore } from './store/store';
 import { UiProvider, useUi, type Tab } from './store/ui';
 import { MonthNav, ScopeSwitcher } from './components/ScopeBar';
 import { QuickAdd } from './components/QuickAdd';
+import { ThemeToggle } from './components/ThemeToggle';
 import { BudgetView } from './views/BudgetView';
 import { TransactionsView } from './views/TransactionsView';
 import { ExcelImportCard, PersonsCard, SettingsView } from './views/SettingsView';
@@ -36,6 +37,7 @@ function Onboarding() {
     <div className="app">
       <header className="topbar">
         <h1 className="brand">Budget</h1>
+        <ThemeToggle />
       </header>
       <main className="main">
         <PersonsCard intro />
@@ -70,6 +72,7 @@ function Shell() {
         <nav className="tabs tabs-top" aria-label="Sidor">
           <TabButtons />
         </nav>
+        <ThemeToggle />
       </header>
 
       <main className="main">

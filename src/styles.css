@@ -34,8 +34,9 @@
   line-height: 1.4;
 }
 
+/* Mörkt: följer systemet om inget tema valts, eller när "Mörkt" valts i appen */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme='light']) {
     color-scheme: dark;
     --page: #0d0d0d;
     --surface: #1a1a19;
@@ -63,6 +64,34 @@
     --hover-wash: rgba(255, 255, 255, 0.06);
     --shadow: none;
   }
+}
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --page: #0d0d0d;
+  --surface: #1a1a19;
+  --surface-2: #242423;
+  --border: rgba(255, 255, 255, 0.1);
+  --text: #f0efec;
+  --text-2: #c3c2b7;
+  --text-muted: #898781;
+  --accent: #2dd4bf;
+  --accent-ink: #042f2e;
+  --accent-wash: rgba(45, 212, 191, 0.12);
+  --good: #0ca30c;
+  --bad: #f07070;
+  --warn: #fab219;
+  --focus: #3987e5;
+
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-budget: #52514e;
+  --div-pos: #3987e5;
+  --div-neg: #e66767;
+  --grid: #2c2c2a;
+  --axis: #383835;
+  --hover-wash: rgba(255, 255, 255, 0.06);
+  --shadow: none;
 }
 
 /* ---------- Bas ---------- */
@@ -152,6 +181,20 @@ button:focus-visible {
   background: color-mix(in srgb, var(--page) 88%, transparent);
   backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--border);
+}
+.theme-toggle {
+  margin-left: auto;
+  display: grid;
+  place-items: center;
+}
+.theme-toggle svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 .brand {
   font-size: 1.15rem;

@@ -3,6 +3,7 @@ import type { MonthBudget, Person } from '../types';
 import { useStore } from '../store/store';
 import { useUi } from '../store/ui';
 import { useToast } from '../components/Toast';
+import { ThemeCard } from '../components/ThemeToggle';
 import { emptyData, normalizeData } from '../store/storage';
 import { evalOr0 } from '../lib/expr';
 import { monthId, newId } from '../lib/id';
@@ -15,6 +16,7 @@ export function SettingsView() {
     <>
       <PersonsCard />
       <PeriodCard />
+      <ThemeCard />
       <ExcelImportCard />
       <BackupCard />
     </>
@@ -103,7 +105,7 @@ function PeriodCard() {
       <p className="muted">
         {day === 1
           ? 'Kalendermånad.'
-          : `Lön till lön: ${periodLabel(example)}budgeten gäller ${rangeLabel(example, day)}. Köp loggas till rätt månad efter datum.`}
+          : `Lön till lön: budgeten för ${periodLabel(example)} gäller ${rangeLabel(example, day)}. Köp loggas till rätt månad efter datum.`}
       </p>
     </section>
   );

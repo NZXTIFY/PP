@@ -266,7 +266,7 @@ function HouseholdBudget({ period }: { period: Period }) {
                 <th>Utgifter</th>
                 <th>Sparande</th>
                 <th>Över/under (plan)</th>
-                <th>Över/under (faktiskt)</th>
+                <th>Över/under (utfall/prognos)</th>
               </tr>
             </thead>
             <tbody>
@@ -279,7 +279,7 @@ function HouseholdBudget({ period }: { period: Period }) {
                     <td>{num(s!.spending.budget)}</td>
                     <td>{num(s!.sections.savings.budget)}</td>
                     <td>{num(s!.result.budget)}</td>
-                    <td>{s!.hasActuals ? num(s!.result.actual) : '–'}</td>
+                    <td>{s!.hasActuals ? num(s!.forecast.result) : '–'}</td>
                   </tr>
                 ))}
             </tbody>
