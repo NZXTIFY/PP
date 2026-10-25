@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import type { Period, Scope } from '../types';
+import type { InboxEntry } from '../lib/inbox';
 import { HOUSEHOLD } from '../types';
 import { currentPeriod } from '../lib/period';
 import { useStore } from './store';
@@ -21,6 +22,8 @@ interface UiValue {
 
 export interface QuickAddState {
   lineKey?: string;
+  /** Bokför ett köp från Apple Pay-inkorgen */
+  inbox?: InboxEntry;
 }
 
 const UiContext = createContext<UiValue | null>(null);

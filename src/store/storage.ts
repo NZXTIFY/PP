@@ -13,7 +13,7 @@ export interface StorageAdapter {
 }
 
 export function emptyData(): AppData {
-  return { version: 1, persons: [], months: {}, transactions: [], settings: { periodStartDay: 25 } };
+  return { version: 1, persons: [], months: {}, transactions: [], settings: { periodStartDay: 25 }, merchants: {} };
 }
 
 /** Säkerställer att data (från lagring eller en backupfil) har rätt form. */
@@ -29,6 +29,7 @@ export function normalizeData(raw: unknown): AppData {
     months: d.months ?? {},
     transactions: Array.isArray(d.transactions) ? d.transactions : [],
     settings: { periodStartDay: 25, ...d.settings },
+    merchants: d.merchants && typeof d.merchants === 'object' ? d.merchants : {},
   };
 }
 

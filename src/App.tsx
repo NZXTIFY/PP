@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
-import { useCloud } from './cloud/context';
+import { useCloud, useInbox } from './cloud/context';
 import { useStore } from './store/store';
 import { UiProvider, useUi, type Tab } from './store/ui';
 import { MonthNav, ScopeSwitcher } from './components/ScopeBar';
@@ -50,6 +50,8 @@ function Onboarding() {
 
 function TabButtons({ withIcons }: { withIcons?: boolean }) {
   const { tab, setTab } = useUi();
+  // Antal Apple Pay-köp som väntar på en kategori
+  const waiting = useInbox()?.entries.length ?? 0;
   return TABS.map((t) => (
     <button key={t.id} className={tab === t.id ? 'is-active' : ''} aria-current={tab === t.id ? 'page' : undefined} onClick={() => setTab(t.id)}>
       {withIcons && (
@@ -58,6 +60,11 @@ function TabButtons({ withIcons }: { withIcons?: boolean }) {
         </svg>
       )}
       {t.label}
+      {t.id === 'kop' && waiting > 0 && (
+        <span className="tab-count" aria-label={`${waiting} att kategorisera`}>
+          {waiting}
+        </span>
+      )}
     </button>
   ));
 }

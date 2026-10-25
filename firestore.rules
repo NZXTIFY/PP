@@ -86,6 +86,27 @@ service cloud.firestore {
       match /transactions/{id} {
         allow read, write: if isMember(hid);
       }
+
+      // Inkorg för köp från Apple Pay (genvägen på telefonen). Nyckeln i adressen fungerar som
+      // lösenord: den som känner till den kan bara lägga till köp i inkorgen, inte läsa något.
+      match /inboxKeys/{key} {
+        allow read: if isMember(hid);
+        allow create: if isMember(hid)
+          && key.size() >= 24
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.keys().hasOnly(['personId', 'uid', 'createdAt']);
+        allow delete: if isMember(hid) && (resource.data.uid == request.auth.uid || isOwner(hid));
+      }
+
+      match /inbox/{key}/items/{itemId} {
+        allow read, delete: if isMember(hid);
+        // Genvägen är inte inloggad – det räcker att nyckeln finns
+        allow create: if exists(/databases/$(database)/documents/households/$(hid)/inboxKeys/$(key))
+          && request.resource.data.keys().hasOnly(['kop'])
+          && request.resource.data.kop is string
+          && request.resource.data.kop.size() > 0
+          && request.resource.data.kop.size() <= 300;
+      }
     }
   }
 }

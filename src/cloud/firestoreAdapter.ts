@@ -12,7 +12,7 @@ import type { StorageAdapter } from '../store/storage';
 
 /**
  * Datamodell i Firestore:
- *   households/{hid}                    { name, ownerId, persons, settings }
+ *   households/{hid}                    { name, ownerId, persons, settings, merchants }
  *   households/{hid}/months/{monthId}   MonthBudget
  *   households/{hid}/transactions/{id}  Transaction
  *
@@ -44,6 +44,7 @@ export class FirestoreAdapter implements StorageAdapter {
         settings: { periodStartDay: 25, ...(household.settings as Partial<Settings>) },
         months,
         transactions,
+        merchants: (household.merchants ?? {}) as AppData['merchants'],
       };
       this.synced = data;
       onData(data);
@@ -87,8 +88,10 @@ export class FirestoreAdapter implements StorageAdapter {
     const base = doc(this.db, 'households', this.householdId);
     const writes: ((b: WriteBatch) => void)[] = [];
 
-    if (data.persons !== prev.persons || data.settings !== prev.settings) {
-      writes.push((b) => b.update(base, { persons: data.persons, settings: data.settings }));
+    if (data.persons !== prev.persons || data.settings !== prev.settings || data.merchants !== prev.merchants) {
+      writes.push((b) =>
+        b.update(base, { persons: data.persons, settings: data.settings, merchants: data.merchants }),
+      );
     }
 
     for (const [id, month] of Object.entries(data.months)) {

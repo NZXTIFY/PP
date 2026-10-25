@@ -95,6 +95,7 @@ export async function createHousehold(user: User, name: string, local: AppData |
     ownerId: user.uid,
     persons,
     settings: local?.settings ?? { periodStartDay: 25 },
+    merchants: local?.merchants ?? {},
     createdAt: serverTimestamp(),
   });
   batch.set(doc(ref, 'members', user.uid), {

@@ -30,3 +30,11 @@ export function incomePercents(incomes: number[]): number[] | null {
 export function splitGroup(all: Transaction[], tx: Transaction): Transaction[] {
   return tx.splitId ? all.filter((t) => t.splitId === tx.splitId) : [tx];
 }
+
+/** Sparade procent per person-id i personernas ordning, eller null om de inte går ihop till 100. */
+export function percentsFor(saved: Record<string, number> | undefined, personIds: string[]): number[] | null {
+  if (!saved) return null;
+  const pct = personIds.map((id) => saved[id]);
+  if (!pct.every((n) => typeof n === 'number')) return null;
+  return pct.reduce((a, b) => a + b, 0) === 100 ? pct : null;
+}

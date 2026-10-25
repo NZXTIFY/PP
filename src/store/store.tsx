@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useReducer, useRef, useState, type Dispatch, type ReactNode } from 'react';
-import type { AppData, Line, MonthBudget, Person, Period, SectionId, Settings, Transaction } from '../types';
+import type { AppData, Line, MerchantRule, MonthBudget, Person, Period, SectionId, Settings, Transaction } from '../types';
 import { lineKey, makeLine, templateLines } from '../lib/defaults';
+import { merchantKey } from '../lib/inbox';
 import { monthId, newId } from '../lib/id';
 import { clampStartDay } from '../lib/period';
 import { emptyData, type StorageAdapter } from './storage';
@@ -25,7 +26,9 @@ export type Action =
   | { type: 'updateTransaction'; id: string; patch: Partial<Omit<Transaction, 'id'>> }
   | { type: 'removeTransaction'; id: string }
   | { type: 'settings'; patch: Partial<Settings> }
-  | { type: 'importMonths'; persons: Person[]; months: MonthBudget[] };
+  | { type: 'importMonths'; persons: Person[]; months: MonthBudget[] }
+  | { type: 'rememberMerchant'; rule: MerchantRule }
+  | { type: 'forgetMerchant'; key: string };
 
 const now = () => new Date().toISOString();
 
@@ -67,6 +70,8 @@ function reducer(state: AppData, action: Action): AppData {
     }
 
     case 'createMonth': {
+      // Finns månaden redan (t.ex. två köp bokförda i samma veva) ska den inte skrivas över
+      if (state.months[monthId(action.personId, action.period)]) return state;
       const month = copyMonth(action.personId, action.period, action.from);
       return { ...state, months: { ...state.months, [month.id]: month } };
     }
@@ -152,6 +157,8 @@ function reducer(state: AppData, action: Action): AppData {
       }));
 
     case 'addTransaction':
+      // Samma id två gånger = samma köp (t.ex. bokfört från inkorgen på två enheter)
+      if (state.transactions.some((t) => t.id === action.tx.id)) return state;
       return { ...state, transactions: [...state.transactions, action.tx] };
 
     case 'updateTransaction':
@@ -175,6 +182,17 @@ function reducer(state: AppData, action: Action): AppData {
       const months = { ...state.months };
       for (const m of action.months) months[m.id] = m;
       return { ...state, persons, months };
+    }
+
+    case 'rememberMerchant': {
+      const key = merchantKey(action.rule.name);
+      if (!key) return state;
+      return { ...state, merchants: { ...state.merchants, [key]: action.rule } };
+    }
+
+    case 'forgetMerchant': {
+      const { [action.key]: _removed, ...merchants } = state.merchants;
+      return { ...state, merchants };
     }
   }
 }

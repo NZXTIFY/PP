@@ -3,14 +3,15 @@ import type { Line, SectionId } from '../types';
 import { HOUSEHOLD } from '../types';
 import { useStore } from '../store/store';
 import { useUi, type QuickAddState } from '../store/ui';
+import { bookPurchase } from '../store/book';
+import { useInbox } from '../cloud/context';
 import { useToast } from './Toast';
 import { personMonth, previousMonth } from '../lib/calc';
 import { templateLines } from '../lib/defaults';
 import { evalOr0, evaluate } from '../lib/expr';
-import { monthId, newId } from '../lib/id';
 import { num } from '../lib/format';
 import { periodLabel, periodOf, rangeLabel, todayISO } from '../lib/period';
-import { evenPercents, incomePercents, splitAmount } from '../lib/split';
+import { evenPercents, incomePercents, percentsFor, splitAmount } from '../lib/split';
 import { setPrefs, usePrefs } from '../lib/prefs';
 
 const ORDER: { id: SectionId; title: string }[] = [
@@ -34,20 +35,29 @@ function QuickAddSheet({ initial, onClose }: { initial: QuickAddState; onClose()
   const startDay = data.settings.periodStartDay;
   const persons = data.persons;
   const multi = persons.length > 1;
+  const personIds = persons.map((p) => p.id);
+  const fallbackPerson = scope === HOUSEHOLD ? (persons[0]?.id ?? '') : scope;
+
+  // Ett köp från Apple Pay-inkorgen: förifyllt, och kategorin från det appen minns om handlaren
+  const inbox = useInbox();
+  const entry = initial.inbox;
+  const [match] = useState(() => (entry && inbox ? inbox.suggest(entry) : null));
 
   // Vem köpet gäller: en person eller hela hushållet (delas mellan alla)
-  const [target, setTarget] = useState(
-    scope === HOUSEHOLD ? (multi ? HOUSEHOLD : (persons[0]?.id ?? '')) : scope,
-  );
-  const [percents, setPercents] = useState<number[]>(() => {
-    const saved = persons.map((p) => prefs.split[p.id]);
-    const ok = saved.every((n) => typeof n === 'number') && saved.reduce((a, b) => a + b, 0) === 100;
-    return ok ? saved : evenPercents(persons.length || 1);
+  const [target, setTarget] = useState(() => {
+    if (entry) return match?.rule.shared && multi ? HOUSEHOLD : (entry.personId ?? fallbackPerson);
+    return scope === HOUSEHOLD ? (multi ? HOUSEHOLD : (persons[0]?.id ?? '')) : scope;
   });
-  const [amount, setAmount] = useState('');
-  const [lineKey, setLineKey] = useState(initial.lineKey ?? '');
-  const [note, setNote] = useState('');
-  const [date, setDate] = useState(todayISO());
+  const [percents, setPercents] = useState<number[]>(
+    () =>
+      (match?.rule.shared ? percentsFor(match.rule.split, personIds) : null) ??
+      percentsFor(prefs.split, personIds) ??
+      evenPercents(persons.length || 1),
+  );
+  const [amount, setAmount] = useState(entry?.amount != null ? String(entry.amount).replace('.', ',') : '');
+  const [lineKey, setLineKey] = useState(initial.lineKey ?? match?.rule.lineKey ?? '');
+  const [note, setNote] = useState(entry?.merchant ?? '');
+  const [date, setDate] = useState(entry?.date ?? todayISO());
   const [showAllSections, setShowAllSections] = useState(false);
   const amountRef = useRef<HTMLInputElement>(null);
 
@@ -87,44 +97,17 @@ function QuickAddSheet({ initial, onClose }: { initial: QuickAddState; onClose()
 
   function save(again: boolean) {
     if (!canSave || !selected) return;
-    const amounts = shared ? parts : [value!];
-    const splitId = shared ? newId() : undefined;
-    const created: string[] = [];
-
-    targets.forEach((t, i) => {
-      if (shared && amounts[i] === 0) return;
-      if (!t.month) {
-        dispatch({ type: 'createMonth', personId: t.pid, period, from: t.prev });
-        created.push(persons.find((p) => p.id === t.pid)?.name ?? '');
-      }
-      dispatch({
-        type: 'ensureLine',
-        monthId: monthId(t.pid, period),
-        key: selected.key,
-        section: selected.section,
-        name: selected.name,
-      });
-      dispatch({
-        type: 'addTransaction',
-        tx: {
-          id: newId(),
-          personId: t.pid,
-          period,
-          lineKey: selected.key,
-          amount: amounts[i],
-          date,
-          note: note.trim(),
-          createdAt: new Date().toISOString(),
-          splitId,
-          share: shared ? percents[i] / 100 : undefined,
-        },
-      });
-    });
+    const line = { key: selected.key, section: selected.section, name: selected.name };
+    const split = shared ? percents : undefined;
+    const booked =
+      entry && inbox
+        ? inbox.book(entry, { line, target, percents: split, amount: value!, date, note })
+        : bookPurchase(data, dispatch, { personIds: targets.map((t) => t.pid), percents: split, line, amount: value!, date, note });
 
     if (shared) setPrefs({ split: Object.fromEntries(persons.map((p, i) => [p.id, percents[i]])) });
-    const split = shared ? ` – delat ${percents.join('/')}` : '';
-    const createdText = created.length ? ` – ${periodLabel(period)} skapad` : '';
-    toast(`${num(value!)} kr på ${selected.name}${split}${createdText}`);
+    const splitText = shared ? ` – delat ${percents.join('/')}` : '';
+    const createdText = booked.createdMonths.length ? ` – ${periodLabel(booked.period)} skapad` : '';
+    toast(`${num(value!)} kr på ${selected.name}${splitText}${createdText}`);
     if (again) {
       setAmount('');
       setNote('');
@@ -145,7 +128,7 @@ function QuickAddSheet({ initial, onClose }: { initial: QuickAddState; onClose()
         onClick={(e) => e.stopPropagation()}
       >
         <header className="sheet-head">
-          <h2 id="quickadd-title">Logga köp</h2>
+          <h2 id="quickadd-title">{entry ? 'Bokför köp' : 'Logga köp'}</h2>
           <button className="icon-btn" aria-label="Stäng" onClick={onClose}>
             ×
           </button>
@@ -173,6 +156,14 @@ function QuickAddSheet({ initial, onClose }: { initial: QuickAddState; onClose()
           {amount && value === null && <p className="form-error">Kunde inte tolka beloppet.</p>}
           {amount && value !== null && /[+\-*/]/.test(amount.slice(1)) && (
             <p className="form-hint">= {num(value)} kr</p>
+          )}
+          {entry && (
+            <p className="form-hint">
+              Från Apple Pay
+              {entry.amount === null && <> – kunde inte läsa beloppet ur ”{entry.raw}”</>}
+              {entry.currency && <> – köpet var i {entry.currency}, skriv in vad det blev i kronor</>}
+              {match && !match.exact && <> – kategorin är en gissning utifrån liknande butiker</>}
+            </p>
           )}
 
           {multi && (
@@ -308,9 +299,11 @@ function QuickAddSheet({ initial, onClose }: { initial: QuickAddState; onClose()
           </p>
 
           <div className="sheet-actions">
-            <button type="button" className="btn" disabled={!canSave} onClick={() => save(true)}>
-              Spara & nästa
-            </button>
+            {!entry && (
+              <button type="button" className="btn" disabled={!canSave} onClick={() => save(true)}>
+                Spara & nästa
+              </button>
+            )}
             <button type="submit" className="btn btn-primary" disabled={!canSave}>
               Spara
             </button>

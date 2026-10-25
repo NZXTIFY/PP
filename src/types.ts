@@ -40,6 +40,21 @@ export interface Transaction {
   splitId?: string;
   /** Personens andel av det delade köpet, 0–1. */
   share?: number;
+  /** 'wallet' = kom från Apple Pay via inkorgen */
+  source?: 'wallet';
+}
+
+/** Vad appen minns om en handlare, så att nästa köp där hamnar rätt direkt. */
+export interface MerchantRule {
+  /** Handlarens namn som det kom från telefonen */
+  name: string;
+  lineKey: string;
+  section: SectionId;
+  lineName: string;
+  /** Delas mellan alla i hushållet, annars bokförs det på den som betalade */
+  shared: boolean;
+  /** Procent per person-id för delade köp */
+  split?: Record<string, number>;
 }
 
 export interface Person {
@@ -50,6 +65,8 @@ export interface Person {
 export interface Settings {
   /** Dag i månaden då budgetperioden börjar. 1 = kalendermånad, 25 = lön till lön. */
   periodStartDay: number;
+  /** Bokför köp från inkorgen direkt när handlaren är känd. Standard: på. */
+  inboxAutoBook?: boolean;
 }
 
 export interface AppData {
@@ -58,6 +75,8 @@ export interface AppData {
   months: Record<string, MonthBudget>;
   transactions: Transaction[];
   settings: Settings;
+  /** Kända handlare, nyckel = merchantKey(namn) */
+  merchants: Record<string, MerchantRule>;
 }
 
 /** Person-id eller hela hushållet. */

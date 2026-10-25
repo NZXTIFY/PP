@@ -4,6 +4,7 @@ import { HOUSEHOLD } from '../types';
 import { useStore } from '../store/store';
 import { useUi } from '../store/ui';
 import { useToast } from '../components/Toast';
+import { InboxCard } from '../components/InboxCard';
 import { personMonth, previousMonth } from '../lib/calc';
 import { evaluate } from '../lib/expr';
 import { kr, num } from '../lib/format';
@@ -50,6 +51,7 @@ export function TransactionsView() {
 
   return (
     <>
+      <InboxCard />
       <section className="card">
         <div className="section-head">
           <div>
@@ -140,6 +142,7 @@ function TxRow({ entry, onEdit }: { entry: Entry; onEdit(): void }) {
         <span className="tx-cat">
           {lineName(data, first)}
           {split && <span className="badge badge-muted tx-badge">Hushåll</span>}
+          {first.source === 'wallet' && <span className="badge badge-muted tx-badge">Apple Pay</span>}
         </span>
         <span className="tx-note">{[first.note, detail].filter(Boolean).join(' · ') || '–'}</span>
       </button>
@@ -183,6 +186,20 @@ function TxEditor({ group, onDone }: { group: Transaction[]; onDone(): void }) {
         patch: { amount: amounts[i], note: note.trim(), date, period, lineKey },
       });
     });
+    // Byter man kategori på ett Apple Pay-köp ska nästa köp hos samma handlare hamna där
+    if (first.source === 'wallet' && first.note && line && lineKey !== first.lineKey) {
+      dispatch({
+        type: 'rememberMerchant',
+        rule: {
+          name: first.note,
+          lineKey: line.key,
+          section: line.section,
+          lineName: line.name,
+          shared: split,
+          split: split ? Object.fromEntries(group.map((t) => [t.personId, Math.round(shareOf(t, group) * 100)])) : undefined,
+        },
+      });
+    }
     onDone();
   }
 

@@ -8,6 +8,7 @@ import { FirestoreAdapter } from './firestoreAdapter';
 import { CloudContext } from './context';
 import type { HouseholdMeta, Invite, Member, Profile } from './household';
 import { AuthScreen, HouseholdSetup } from './AuthScreens';
+import { InboxProvider } from './InboxProvider';
 
 const RETRY_MS = 5000;
 
@@ -111,7 +112,9 @@ function Session({ user, profile, householdId }: { user: User; profile: Profile 
   return (
     <CloudContext.Provider value={{ user, profile, householdId, household, members, invites, isOwner }}>
       <StoreProvider key={householdId} adapter={adapter}>
-        <App />
+        <InboxProvider householdId={householdId}>
+          <App />
+        </InboxProvider>
       </StoreProvider>
     </CloudContext.Provider>
   );

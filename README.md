@@ -8,7 +8,8 @@ utgifter samt sparande, med budgeterat och faktiskt per rad.
 - **Följ upp löpande:** logga köp med +-knappen så summeras de under Faktiskt, eller skriv in en slutsumma.
   "Resten enligt budget" fyller i fasta räkningar med ett klick.
 - **Lön till lön:** budgetmånaden börjar som standard den 25:e (går att ändra under Inställningar).
-- **Flera personer + hushållsvy** som summerar allt automatiskt.
+- **Flera personer + hushållsvy** som summerar allt automatiskt. Köp kan delas mellan personerna (50/50, 40/60 …).
+- **Apple Pay:** köp man blippar med iPhone kan skickas till appen automatiskt via en genväg (se nedan).
 - **Analys:** utgifter mot budget, över/underskott, fördelning, avvikelse per kategori, trender och årsöversikt.
 - **Import från Excel** (läses lokalt i webbläsaren) samt export/import av backup som JSON.
 
@@ -62,16 +63,32 @@ Konfigurationen är inte hemlig och kan ligga i repot – det är säkerhetsregl
 ```
 users/{uid}                              namn, e-post, householdId
 invites/{kod}                            householdId, utgångsdatum
-households/{hid}                         namn, ownerId, personer, inställningar
+households/{hid}                         namn, ownerId, personer, inställningar, kända handlare
 households/{hid}/members/{uid}           roll (owner | member)
 households/{hid}/invites/{kod}           ägarens lista över aktiva koder
 households/{hid}/months/{personId:YYYY-MM}
 households/{hid}/transactions/{id}
+households/{hid}/inboxKeys/{nyckel}      personId, skapad av – en adress per telefon
+households/{hid}/inbox/{nyckel}/items/{id}   { kop: "Belopp;Handlare;Datum" }
 ```
 
 All läsning och skrivning går genom `StorageAdapter` (`src/store/storage.ts`). `FirestoreAdapter`
 (`src/cloud/firestoreAdapter.ts`) skriver bara de dokument som ändrats och tar emot ändringar från andra enheter i
 realtid.
+
+## Apple Pay via Genvägar
+
+En automation i Genvägar på iPhone (utlösaren **Transaktion**) skickar varje Apple Pay-köp till hushållets inkorg med
+Firestores REST-API. Genvägen är inte inloggad: adressen innehåller en lång slumpad nyckel och reglerna tillåter bara
+att nya köp läggs till för en nyckel som finns – ingen kan läsa något med den.
+
+- Adresser skapas per person under **Inställningar → Apple Pay**. Där finns också steg-för-steg-guiden för genvägen.
+- Köpen hamnar under **Att kategorisera** på sidan Köp. Första gången man väljer kategori för en handlare minns appen
+  den, och nästa köp där bokförs automatiskt (går att stänga av). Köp i utländsk valuta väntar alltid på en
+  bekräftelse.
+- Köp bokförs med fasta id:n (`w-{id}`), så samma köp kan inte hamna dubbelt även om två enheter är öppna samtidigt.
+- Genvägen skickar fältet `kop` som text: `Belopp;Handlare;Datum`, t.ex.
+  `129,00 kr;ICA Nära;2026-10-25T14:03:00+02:00`. Beloppet och datumet tolkas i appen (`src/lib/inbox.ts`).
 
 ## Struktur
 
@@ -82,5 +99,5 @@ src/
   views/      Budget, Köp, Analys, Inställningar
   components/ inmatningsfält, rader, snabbregistrering, diagramdelar
   import/     Excel-import (.xlsx tolkas i webbläsaren)
-  cloud/      Firebase: inloggning, hushåll, inbjudningar, Firestore-lagring
+  cloud/      Firebase: inloggning, hushåll, inbjudningar, Firestore-lagring, Apple Pay-inkorg
 ```

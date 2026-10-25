@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useToast } from '../components/Toast';
 import { useCloud } from './context';
+import { ApplePayCard } from './ApplePayCard';
 import {
   createInvite,
   errorText,
@@ -24,6 +25,7 @@ export default function CloudSettings() {
   return (
     <>
       <HouseholdCard />
+      <ApplePayCard />
       <AccountCard />
     </>
   );
