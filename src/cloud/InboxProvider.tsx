@@ -90,7 +90,7 @@ export function InboxProvider({ householdId, children }: { householdId: string; 
     return ruleChoice(entry, match.rule, split, today);
   }
 
-  function book(entry: InboxEntry, choice: InboxChoice): Booked {
+  function book(entry: InboxEntry, choice: InboxChoice, changeMerchant = false): Booked {
     const personIds = choice.target === HOUSEHOLD ? data.persons.map((p) => p.id) : [choice.target];
     const shared = personIds.length > 1;
     const booked = bookPurchase(data, dispatch, {
@@ -104,8 +104,10 @@ export function InboxProvider({ householdId, children }: { householdId: string; 
       source: 'wallet',
     });
 
-    // Appen minns bara kategorin – vems köpet är avgörs av kortet
-    if (entry.merchant && data.merchants[merchantKey(entry.merchant)]?.lineKey !== choice.line.key) {
+    // Appen minns bara kategorin – vems köpet är avgörs av kortet. En ny handlare lärs in direkt,
+    // en känd byter kategori bara om man ber om det (annars gäller ändringen bara det här köpet).
+    const known = entry.merchant ? data.merchants[merchantKey(entry.merchant)] : undefined;
+    if (entry.merchant && known?.lineKey !== choice.line.key && (!known || changeMerchant)) {
       dispatch({
         type: 'rememberMerchant',
         rule: { name: entry.merchant, lineKey: choice.line.key, section: choice.line.section, lineName: choice.line.name },

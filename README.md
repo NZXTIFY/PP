@@ -90,6 +90,8 @@ att nya köp läggs till för en nyckel som finns – ingen kan läsa något med
 - Köpen hamnar under **Att kategorisera** på sidan Köp. Första gången man väljer kategori för en handlare minns appen
   den, och nästa köp där bokförs automatiskt (går att stänga av). Köp i utländsk valuta väntar alltid på en
   bekräftelse.
+- Byter man kategori på ett köp från en känd handlare ändrar **Spara** bara det köpet; **Spara för &lt;handlaren&gt;**
+  ändrar även kategorin för kommande köp där.
 - Köp bokförs med fasta id:n (`w-{id}`), så samma köp kan inte hamna dubbelt även om två enheter är öppna samtidigt.
 - Genvägen skickar fältet `kop` som text: `Belopp;Handlare;Datum`, t.ex.
   `129,00 kr;ICA Nära;2026-10-25T14:03:00+02:00`. Beloppet och datumet tolkas i appen (`src/lib/inbox.ts`).

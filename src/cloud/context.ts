@@ -31,8 +31,11 @@ export interface InboxValue {
   suggest(entry: InboxEntry): MerchantMatch | null;
   /** Hur köpet bokförs med ett tryck (känd handlare, i kronor), annars null */
   quickChoice(entry: InboxEntry): InboxChoice | null;
-  /** Bokför köpet, minns handlaren och tar bort det ur inkorgen */
-  book(entry: InboxEntry, choice: InboxChoice): Booked;
+  /**
+   * Bokför köpet och tar bort det ur inkorgen. En ny handlare lärs in; en känd handlare
+   * får den nya kategorin bara med changeMerchant.
+   */
+  book(entry: InboxEntry, choice: InboxChoice, changeMerchant?: boolean): Booked;
   discard(entry: InboxEntry): void;
   /** Ångra book/discard: tar bort transaktionerna och lägger tillbaka köpet i inkorgen */
   undo(entries: InboxEntry[], txIds: string[]): void;

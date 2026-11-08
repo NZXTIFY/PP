@@ -231,7 +231,7 @@ export function ApplePayCard() {
         </ol>
         <p className="muted">
           Första gången du väljer kategori för en handlare kommer appen ihåg den, oavsett vilket kort du betalar med.
-          Kortet avgör vems köpet är{multi && ': egna kort hamnar hos dig, det gemensamma kortet delas enligt inställningen ovan'}.
+          Byter du kategori på ett enstaka köp senare väljer du om det gäller bara det köpet eller även kommande. Kortet avgör vems köpet är{multi && ': egna kort hamnar hos dig, det gemensamma kortet delas enligt inställningen ovan'}.
         </p>
       </details>
 

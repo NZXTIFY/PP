@@ -5,6 +5,7 @@ import { useStore } from '../store/store';
 import { useUi, type QuickAddState } from '../store/ui';
 import { bookPurchase } from '../store/book';
 import { useInbox } from '../cloud/context';
+import { merchantKey } from '../lib/inbox';
 import { useToast } from './Toast';
 import { householdPercents, personMonth, previousMonth } from '../lib/calc';
 import { templateLines } from '../lib/defaults';
@@ -112,21 +113,31 @@ function QuickAddSheet({ initial, onClose }: { initial: QuickAddState; onClose()
   const preselectedSection = selected?.section;
   const sections = ORDER.filter((s) => s.id === 'variable' || showAllSections || s.id === preselectedSection);
 
-  function save(again: boolean) {
+  // Handlaren bakom ett Apple Pay-köp och kategorin appen minns för den. Spara ändrar bara
+  // det här köpet; "Spara för <handlaren>" ändrar även kommande köp där. En ny handlare i
+  // inkorgen lärs in direkt av Spara (annars skulle den aldrig bokföras automatiskt).
+  const merchant = entry ? entry.merchant : first?.source === 'wallet' ? (first.note ?? '') : '';
+  const merchantId = merchant ? merchantKey(merchant) : '';
+  const known = merchantId ? data.merchants[merchantId] : undefined;
+  const learns = !!entry && !!merchantId && !known;
+  const canChangeMerchant = !!merchantId && !learns && !!selected && known?.lineKey !== selected.key;
+
+  function save(again: boolean, forMerchant = false) {
     if (!canSave || !selected) return;
     const line = { key: selected.key, section: selected.section, name: selected.name };
     const split = shared ? percents : undefined;
     const splitText = shared ? ` – delat ${percents.join('/')}` : '';
-    if (original && first) return saveEdit(line, split, splitText);
+    const merchantText = forMerchant ? ` – även kommande köp hos ${merchant}` : '';
+    if (original && first) return saveEdit(line, split, splitText + merchantText, forMerchant);
 
     const booked =
       entry && inbox
-        ? inbox.book(entry, { line, target, percents: split, amount: value!, date, note })
+        ? inbox.book(entry, { line, target, percents: split, amount: value!, date, note }, forMerchant)
         : bookPurchase(data, dispatch, { personIds: targets.map((t) => t.pid), percents: split, line, amount: value!, date, note });
 
     if (shared && !entry) setPrefs({ split: Object.fromEntries(persons.map((p, i) => [p.id, percents[i]])) });
     const createdText = booked.createdMonths.length ? ` – ${periodLabel(booked.period)} skapad` : '';
-    toast(`${num(value!)} kr på ${selected.name}${splitText}${createdText}`);
+    toast(`${num(value!)} kr på ${selected.name}${splitText}${merchantText}${createdText}`);
     if (again) {
       setAmount('');
       setNote('');
@@ -138,7 +149,12 @@ function QuickAddSheet({ initial, onClose }: { initial: QuickAddState; onClose()
   }
 
   /** Ett ändrat köp bokförs om, med samma id:n så långt det går, och kan ångras. */
-  function saveEdit(line: { key: string; section: SectionId; name: string }, split: number[] | undefined, splitText: string) {
+  function saveEdit(
+    line: { key: string; section: SectionId; name: string },
+    split: number[] | undefined,
+    text: string,
+    forMerchant: boolean,
+  ) {
     if (!original || !first) return;
     for (const t of original) dispatch({ type: 'removeTransaction', id: t.id });
     const booked = bookPurchase(data, dispatch, {
@@ -152,14 +168,18 @@ function QuickAddSheet({ initial, onClose }: { initial: QuickAddState; onClose()
       source: first.source,
       createdAt: first.createdAt,
     });
-    // Byter man kategori på ett Apple Pay-köp ska nästa köp hos samma handlare hamna där
-    if (first.source === 'wallet' && first.note && line.key !== first.lineKey) {
-      dispatch({ type: 'rememberMerchant', rule: { name: first.note, lineKey: line.key, section: line.section, lineName: line.name } });
+    // Bara när man ber om det: kommande köp hos samma handlare hamnar också här
+    const before = known;
+    if (forMerchant && merchantId) {
+      dispatch({ type: 'rememberMerchant', rule: { name: merchant, lineKey: line.key, section: line.section, lineName: line.name } });
     }
-    toast(`Ändrat: ${num(value!)} kr på ${line.name}${splitText}`, {
+    toast(`Ändrat: ${num(value!)} kr på ${line.name}${text}`, {
       undo: () => {
         for (const id of booked.txIds) dispatch({ type: 'removeTransaction', id });
         for (const tx of original) dispatch({ type: 'addTransaction', tx });
+        if (forMerchant && merchantId) {
+          dispatch(before ? { type: 'rememberMerchant', rule: before } : { type: 'forgetMerchant', key: merchantId });
+        }
       },
     });
     onClose();
@@ -213,18 +233,27 @@ function QuickAddSheet({ initial, onClose }: { initial: QuickAddState; onClose()
           {amount && value !== null && /[+\-*/]/.test(amount.slice(1)) && (
             <p className="form-hint">= {num(value)} kr</p>
           )}
-          {entry && (
+          {(entry || first?.source === 'wallet') && (
             <p className="form-hint">
               Från Apple Pay
-              {entry.amount === null && <> – kunde inte läsa beloppet ur ”{entry.raw}”</>}
-              {entry.currency && <> – köpet var i {entry.currency}, skriv in vad det blev i kronor</>}
+              {entry?.amount === null && <> – kunde inte läsa beloppet ur ”{entry.raw}”</>}
+              {entry?.currency && <> – köpet var i {entry.currency}, skriv in vad det blev i kronor</>}
               {match && !match.exact && <> – kategorin är en gissning utifrån liknande butiker</>}
-            </p>
-          )}
-          {first?.source === 'wallet' && (
-            <p className="form-hint">
-              Från Apple Pay
-              {first.note && <> – byter du kategori hamnar nästa köp hos {first.note} där också</>}
+              {learns && <> – kommande köp hos {merchant} hamnar på samma kategori</>}
+              {canChangeMerchant ? (
+                <>
+                  . <strong>Spara</strong> ändrar bara det här köpet, <strong>Spara för {merchant}</strong> även kommande
+                  köp där.
+                </>
+              ) : (
+                known && (
+                  <>
+                    {' '}
+                    – köp hos {merchant} hamnar på {known.lineName}. Byter du kategori kan du välja om det ska gälla
+                    bara det här köpet eller även kommande.
+                  </>
+                )
+              )}
             </p>
           )}
 
@@ -339,6 +368,17 @@ function QuickAddSheet({ initial, onClose }: { initial: QuickAddState; onClose()
             {!entry && !editing && (
               <button type="button" className="btn" disabled={!canSave} onClick={() => save(true)}>
                 Spara & nästa
+              </button>
+            )}
+            {canChangeMerchant && (
+              <button
+                type="button"
+                className="btn sheet-merchant"
+                disabled={!canSave}
+                title={`Spara, och lägg kommande köp hos ${merchant} på ${selected?.name}`}
+                onClick={() => save(false, true)}
+              >
+                Spara för {merchant}
               </button>
             )}
             <button type="submit" className="btn btn-primary" disabled={!canSave}>

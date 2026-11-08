@@ -1075,6 +1075,13 @@ button:focus-visible {
   margin-right: auto;
   padding-left: 0.4rem;
 }
+/* Långa handlarnamn kortas, övriga knappar behåller sin bredd */
+.sheet-actions .sheet-merchant {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .form-hint {
   font-size: 0.85rem;
   color: var(--text-2);
