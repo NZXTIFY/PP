@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { findMerchantRule, merchantKey, newInboxKey, parseAmount, parseDate, parseInboxText, ruleChoice, type InboxEntry } from './inbox';
-import { percentsFor } from './split';
-import { HOUSEHOLD, type MerchantRule } from '../types';
+import { groupPercents, percentsFor } from './split';
+import { HOUSEHOLD, type MerchantRule, type Transaction } from '../types';
 
 describe('inkorgen: belopp', () => {
   it('svenska och engelska format', () => {
@@ -52,12 +52,11 @@ describe('inkorgen: texten från genvägen', () => {
 });
 
 describe('inkorgen: minne för handlare', () => {
-  const rule = (name: string, lineKey = 'variable:mat', shared = false): MerchantRule => ({
+  const rule = (name: string, lineKey = 'variable:mat'): MerchantRule => ({
     name,
     lineKey,
     section: 'variable',
     lineName: 'Mat',
-    shared,
   });
 
   it('samma butik ger samma nyckel', () => {
@@ -78,7 +77,7 @@ describe('inkorgen: minne för handlare', () => {
     };
     expect(findMerchantRule(merchants, 'Pizzeria Milano')).toBeNull();
   });
-  it('bokför på den som betalade, eller delat enligt sparade andelar', () => {
+  it('kortet avgör: eget kort till personen, gemensamt kort delas', () => {
     const entry: InboxEntry = {
       id: 'x',
       key: 'k',
@@ -89,17 +88,34 @@ describe('inkorgen: minne för handlare', () => {
       merchant: 'ICA',
       date: '2026-10-25',
     };
-    expect(ruleChoice(entry, rule('ICA'), ['a', 'b'], '2026-10-26')).toMatchObject({ target: 'b', percents: undefined });
-    const shared = { ...rule('ICA', 'variable:mat', true), split: { a: 40, b: 60 } };
-    expect(ruleChoice(entry, shared, ['a', 'b'], '2026-10-26')).toMatchObject({ target: HOUSEHOLD, percents: [40, 60] });
-    // Ensam i hushållet: inget att dela med
-    expect(ruleChoice({ ...entry, personId: 'a' }, shared, ['a'], '2026-10-26')).toMatchObject({ target: 'a' });
-    expect(ruleChoice({ ...entry, amount: null }, shared, ['a', 'b'], '2026-10-26')).toBeNull();
+    expect(ruleChoice(entry, rule('ICA'), [46, 54], '2026-10-26')).toMatchObject({
+      target: 'b',
+      percents: undefined,
+      line: { key: 'variable:mat', name: 'Mat' },
+    });
+    expect(ruleChoice({ ...entry, personId: HOUSEHOLD }, rule('ICA'), [46, 54], '2026-10-26')).toMatchObject({
+      target: HOUSEHOLD,
+      percents: [46, 54],
+    });
+    expect(ruleChoice({ ...entry, date: null }, rule('ICA'), [46, 54], '2026-10-26')?.date).toBe('2026-10-26');
+    expect(ruleChoice({ ...entry, amount: null }, rule('ICA'), [46, 54], '2026-10-26')).toBeNull();
+    expect(ruleChoice({ ...entry, personId: null }, rule('ICA'), [46, 54], '2026-10-26')).toBeNull();
   });
   it('sparade andelar måste gå ihop', () => {
     expect(percentsFor({ a: 40, b: 60 }, ['a', 'b'])).toEqual([40, 60]);
     expect(percentsFor({ a: 40 }, ['a', 'b'])).toBeNull();
     expect(percentsFor({ a: 40, b: 50 }, ['a', 'b'])).toBeNull();
+  });
+  it('andelar i ett bokfört delat köp', () => {
+    const tx = (personId: string, amount: number, share?: number) =>
+      ({ id: personId, personId, amount, share, splitId: 's' }) as Transaction;
+    expect(groupPercents([tx('a', 59.34, 0.46), tx('b', 69.66, 0.54)], ['a', 'b'])).toEqual([46, 54]);
+    // Äldre köp utan share: räknas ur beloppen
+    expect(groupPercents([tx('a', 40), tx('b', 60)], ['a', 'b'])).toEqual([40, 60]);
+    // Den som hade 0 % fick ingen transaktion
+    expect(groupPercents([tx('b', 100, 1)], ['a', 'b'])).toEqual([0, 100]);
+    // Avrundning: summan blir ändå 100
+    expect(groupPercents([tx('a', 1, 1 / 3), tx('b', 1, 1 / 3), tx('c', 1, 1 / 3)], ['a', 'b', 'c'])).toEqual([33, 33, 34]);
   });
   it('nyckeln är lång nog för reglerna', () => {
     const key = newInboxKey();

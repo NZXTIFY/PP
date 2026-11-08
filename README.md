@@ -5,7 +5,8 @@ utgifter samt sparande, med budgeterat och faktiskt per rad.
 
 - **Smidig inmatning:** skriv belopp direkt eller som uttryck, t.ex. `6170+1005+2286`. Enter hoppar till nästa fält.
 - **Kommer ihåg förra månaden:** en ny månad skapas som en kopia av den föregående, och varje rad visar historiken.
-- **Följ upp löpande:** logga köp med +-knappen så summeras de under Faktiskt, eller skriv in en slutsumma.
+- **Följ upp löpande:** logga köp med +-knappen så summeras de under Faktiskt, eller skriv in en slutsumma. Tryck på
+  ett loggat köp för att ändra det i samma meny.
   "Resten enligt budget" fyller i fasta räkningar med ett klick.
 - **Lön till lön:** budgetmånaden börjar som standard den 25:e (går att ändra under Inställningar).
 - **Flera personer + hushållsvy** som summerar allt automatiskt. Köp kan delas mellan personerna (50/50, 40/60 …).
@@ -68,7 +69,7 @@ households/{hid}/members/{uid}           roll (owner | member)
 households/{hid}/invites/{kod}           ägarens lista över aktiva koder
 households/{hid}/months/{personId:YYYY-MM}
 households/{hid}/transactions/{id}
-households/{hid}/inboxKeys/{nyckel}      personId, skapad av – en adress per telefon
+households/{hid}/inboxKeys/{nyckel}      personId (eller __household__), skapad av
 households/{hid}/inbox/{nyckel}/items/{id}   { kop: "Belopp;Handlare;Datum" }
 ```
 
@@ -82,7 +83,10 @@ En automation i Genvägar på iPhone (utlösaren **Transaktion**) skickar varje 
 Firestores REST-API. Genvägen är inte inloggad: adressen innehåller en lång slumpad nyckel och reglerna tillåter bara
 att nya köp läggs till för en nyckel som finns – ingen kan läsa något med den.
 
-- Adresser skapas per person under **Inställningar → Apple Pay**. Där finns också steg-för-steg-guiden för genvägen.
+- Adresser skapas under **Inställningar → Apple Pay**: en per person för de egna korten och en för hushållets
+  gemensamma kort. Där finns också steg-för-steg-guiden för genvägen och felsökning.
+- Kortet (adressen) avgör vems köpet är. Köp på det gemensamma kortet delas efter inkomst, lika eller en egen
+  fördelning (inställning i hushållet, `settings.householdSplit`).
 - Köpen hamnar under **Att kategorisera** på sidan Köp. Första gången man väljer kategori för en handlare minns appen
   den, och nästa köp där bokförs automatiskt (går att stänga av). Köp i utländsk valuta väntar alltid på en
   bekräftelse.

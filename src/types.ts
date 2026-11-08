@@ -51,10 +51,6 @@ export interface MerchantRule {
   lineKey: string;
   section: SectionId;
   lineName: string;
-  /** Delas mellan alla i hushållet, annars bokförs det på den som betalade */
-  shared: boolean;
-  /** Procent per person-id för delade köp */
-  split?: Record<string, number>;
 }
 
 export interface Person {
@@ -67,6 +63,14 @@ export interface Settings {
   periodStartDay: number;
   /** Bokför köp från inkorgen direkt när handlaren är känd. Standard: på. */
   inboxAutoBook?: boolean;
+  /** Hur köp på hushållets gemensamma kort delas. Standard: efter inkomst. */
+  householdSplit?: HouseholdSplit;
+}
+
+export interface HouseholdSplit {
+  mode: 'income' | 'even' | 'custom';
+  /** Procent per person-id (bara för 'custom') */
+  percents?: Record<string, number>;
 }
 
 export interface AppData {

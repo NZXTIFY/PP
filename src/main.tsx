@@ -8,6 +8,12 @@ import { firebaseConfig } from './cloud/config';
 import './lib/theme';
 import './styles.css';
 
+// Ingen nypzoom på telefonen – Safari bryr sig inte om user-scalable=no i index.html, men stoppar
+// zoomen om gesten avbryts. Sidan ska se ut som en app, med menyerna kvar på plats.
+for (const type of ['gesturestart', 'gesturechange']) {
+  document.addEventListener(type, (e) => e.preventDefault(), { passive: false });
+}
+
 // Med Firebase-konfiguration: inloggning och hushåll i molnet. Utan: allt lokalt i webbläsaren.
 const CloudRoot = lazy(() => import('./cloud/CloudRoot'));
 

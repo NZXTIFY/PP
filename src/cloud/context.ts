@@ -29,11 +29,14 @@ export interface InboxValue {
   /** Felmeddelande om inkorgen inte kan läsas (t.ex. om reglerna inte publicerats) */
   error: string | null;
   suggest(entry: InboxEntry): MerchantMatch | null;
+  /** Hur köpet bokförs med ett tryck (känd handlare, i kronor), annars null */
+  quickChoice(entry: InboxEntry): InboxChoice | null;
   /** Bokför köpet, minns handlaren och tar bort det ur inkorgen */
   book(entry: InboxEntry, choice: InboxChoice): Booked;
   discard(entry: InboxEntry): void;
   /** Ångra book/discard: tar bort transaktionerna och lägger tillbaka köpet i inkorgen */
   undo(entries: InboxEntry[], txIds: string[]): void;
+  /** personId kan vara HOUSEHOLD för det gemensamma kortet */
   createKey(personId: string): Promise<void>;
   revokeKey(key: string): Promise<void>;
   urlFor(key: string): string;

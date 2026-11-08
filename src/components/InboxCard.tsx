@@ -1,11 +1,10 @@
 import type { InboxEntry } from '../lib/inbox';
-import { ruleChoice } from '../lib/inbox';
+import { HOUSEHOLD } from '../types';
 import { useInbox } from '../cloud/context';
 import { useStore } from '../store/store';
 import { useUi } from '../store/ui';
 import { useToast } from './Toast';
 import { kr, num } from '../lib/format';
-import { todayISO } from '../lib/period';
 
 /** Köp från Apple Pay som väntar på en kategori. Visas överst på sidan Köp. */
 export function InboxCard() {
@@ -42,12 +41,13 @@ function InboxRow({ entry }: { entry: InboxEntry }) {
   const { data } = useStore();
   const { openQuickAdd } = useUi();
   const toast = useToast();
-  const personIds = data.persons.map((p) => p.id);
   const match = inbox.suggest(entry);
-  const choice = match ? ruleChoice(entry, match.rule, personIds, todayISO()) : null;
   // Ett tryck räcker när kategorin är känd och köpet var i kronor
-  const quick = choice && !entry.currency ? choice : null;
-  const person = data.persons.find((p) => p.id === entry.personId)?.name ?? 'Okänd person';
+  const quick = inbox.quickChoice(entry);
+  const person =
+    entry.personId === HOUSEHOLD
+      ? 'Gemensamt kort'
+      : (data.persons.find((p) => p.id === entry.personId)?.name ?? 'Okänd person');
 
   function book() {
     if (!quick) return;
@@ -74,7 +74,7 @@ function InboxRow({ entry }: { entry: InboxEntry }) {
           <>
             <button className="btn btn-small btn-primary" onClick={book} title={match?.exact ? undefined : 'Gissning utifrån liknande butiker'}>
               {quick.line.name}
-              {quick.target !== entry.personId && ' · delat'}
+              {quick.target === HOUSEHOLD && ` · ${quick.percents?.join('/')}`}
             </button>
             <button className="btn btn-small" onClick={() => openQuickAdd({ inbox: entry })}>
               Ändra

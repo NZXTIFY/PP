@@ -24,6 +24,8 @@ export interface QuickAddState {
   lineKey?: string;
   /** Bokför ett köp från Apple Pay-inkorgen */
   inbox?: InboxEntry;
+  /** Id på ett loggat köp som ska ändras (ett delat köp ändras i sin helhet) */
+  edit?: string;
 }
 
 const UiContext = createContext<UiValue | null>(null);

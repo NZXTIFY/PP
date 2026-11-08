@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import type { AppData, Transaction } from '../types';
 import { HOUSEHOLD } from '../types';
 import { useStore } from '../store/store';
@@ -6,11 +5,9 @@ import { useUi } from '../store/ui';
 import { useToast } from '../components/Toast';
 import { InboxCard } from '../components/InboxCard';
 import { personMonth, previousMonth } from '../lib/calc';
-import { evaluate } from '../lib/expr';
 import { kr, num } from '../lib/format';
-import { monthId } from '../lib/id';
-import { periodLabel, periodOf } from '../lib/period';
-import { splitAmount, splitGroup } from '../lib/split';
+import { periodLabel } from '../lib/period';
+import { splitGroup } from '../lib/split';
 
 /** En rad i listan: ett vanligt köp, eller i hushållsvyn alla delar av ett delat köp. */
 interface Entry {
@@ -18,14 +15,13 @@ interface Entry {
   first: Transaction;
   /** Delarna som visas (en person) eller hela gruppen (hushållet) */
   shown: Transaction[];
-  /** Hela det delade köpet, för redigering och borttagning */
+  /** Hela det delade köpet, för borttagning */
   group: Transaction[];
 }
 
 export function TransactionsView() {
   const { data } = useStore();
   const { scope, period, openQuickAdd } = useUi();
-  const [editing, setEditing] = useState<string | null>(null);
 
   const txs = data.transactions
     .filter((t) => t.period === period && (scope === HOUSEHOLD || t.personId === scope))
@@ -76,13 +72,9 @@ export function TransactionsView() {
         <section key={date} className="card tx-day">
           <h3 className="tx-date">{formatDate(date)}</h3>
           <ul className="tx-list">
-            {list.map((e) =>
-              editing === e.key ? (
-                <TxEditor key={e.key} group={e.group} onDone={() => setEditing(null)} />
-              ) : (
-                <TxRow key={e.key} entry={e} onEdit={() => setEditing(e.key)} />
-              ),
-            )}
+            {list.map((e) => (
+              <TxRow key={e.key} entry={e} onEdit={() => openQuickAdd({ edit: e.first.id })} />
+            ))}
           </ul>
         </section>
       ))}
@@ -150,105 +142,6 @@ function TxRow({ entry, onEdit }: { entry: Entry; onEdit(): void }) {
       <button className="icon-btn" aria-label={split ? 'Ta bort delat köp' : 'Ta bort köp'} onClick={remove}>
         ×
       </button>
-    </li>
-  );
-}
-
-function TxEditor({ group, onDone }: { group: Transaction[]; onDone(): void }) {
-  const { data, dispatch } = useStore();
-  const first = group[0];
-  const split = group.length > 1;
-  const total = group.reduce((s, t) => s + t.amount, 0);
-  const [amount, setAmount] = useState(String(Math.round(total * 100) / 100));
-  const [note, setNote] = useState(first.note);
-  const [date, setDate] = useState(first.date);
-  const [lineKey, setLineKey] = useState(first.lineKey);
-  const value = evaluate(amount);
-  const month = personMonth(data, first.personId, first.period) ?? previousMonth(data, first.personId, first.period);
-  const options = month?.lines ?? [];
-
-  function save() {
-    if (value === null) return;
-    const period = periodOf(date, data.settings.periodStartDay);
-    const line = options.find((l) => l.key === lineKey);
-    // Ett delat köp delas om med samma andelar
-    const amounts = split ? splitAmount(value, group.map((t) => shareOf(t, group))) : [value];
-    group.forEach((t, i) => {
-      if (!personMonth(data, t.personId, period)) {
-        dispatch({ type: 'createMonth', personId: t.personId, period, from: previousMonth(data, t.personId, period) });
-      }
-      if (line) {
-        dispatch({ type: 'ensureLine', monthId: monthId(t.personId, period), key: line.key, section: line.section, name: line.name });
-      }
-      dispatch({
-        type: 'updateTransaction',
-        id: t.id,
-        patch: { amount: amounts[i], note: note.trim(), date, period, lineKey },
-      });
-    });
-    // Byter man kategori på ett Apple Pay-köp ska nästa köp hos samma handlare hamna där
-    if (first.source === 'wallet' && first.note && line && lineKey !== first.lineKey) {
-      dispatch({
-        type: 'rememberMerchant',
-        rule: {
-          name: first.note,
-          lineKey: line.key,
-          section: line.section,
-          lineName: line.name,
-          shared: split,
-          split: split ? Object.fromEntries(group.map((t) => [t.personId, Math.round(shareOf(t, group) * 100)])) : undefined,
-        },
-      });
-    }
-    onDone();
-  }
-
-  return (
-    <li className="tx-edit">
-      <form
-        className="details-grid"
-        onSubmit={(e) => {
-          e.preventDefault();
-          save();
-        }}
-      >
-        <label>
-          {split ? 'Totalbelopp' : 'Belopp'}
-          <input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} autoFocus />
-        </label>
-        <label>
-          Kategori
-          <select value={lineKey} onChange={(e) => setLineKey(e.target.value)}>
-            {options.map((l) => (
-              <option key={l.key} value={l.key}>
-                {l.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Anteckning
-          <input value={note} onChange={(e) => setNote(e.target.value)} />
-        </label>
-        <label>
-          Datum
-          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-        </label>
-        {split && (
-          <p className="muted">
-            Delas som tidigare:{' '}
-            {group.map((t) => `${personName(data, t.personId)} ${Math.round(shareOf(t, group) * 100)} %`).join(', ')}
-          </p>
-        )}
-        <div className="details-actions">
-          <button className="btn btn-primary" type="submit" disabled={value === null}>
-            Spara
-          </button>
-          <button className="btn btn-ghost" type="button" onClick={onDone}>
-            Avbryt
-          </button>
-        </div>
-      </form>
     </li>
   );
 }

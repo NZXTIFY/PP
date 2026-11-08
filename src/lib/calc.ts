@@ -2,6 +2,7 @@ import type { AppData, Line, MonthBudget, Period, Scope, SectionId, Transaction 
 import { HOUSEHOLD } from '../types';
 import { evalOr0 } from './expr';
 import { monthId } from './id';
+import { evenPercents, incomePercents, percentsFor } from './split';
 
 /** En rad med uträknade belopp. */
 export interface CLine {
@@ -224,6 +225,24 @@ export function previousMonth(data: AppData, personId: string, period: Period): 
   return Object.values(data.months)
     .filter((m) => m.personId === personId && m.period < period)
     .sort((a, b) => (a.period < b.period ? 1 : -1))[0];
+}
+
+/** Budgeterad inkomst per person för perioden (eller senaste månaden före, om den inte skapats än). */
+export function budgetIncomes(data: AppData, personIds: string[], period: Period): number[] {
+  return personIds.map((pid) => {
+    const month = personMonth(data, pid, period) ?? previousMonth(data, pid, period);
+    return (month?.lines ?? []).filter((l) => l.section === 'income').reduce((s, l) => s + evalOr0(l.budget), 0);
+  });
+}
+
+/** Hur ett köp på hushållets gemensamma kort delas, i procent per person i hushållets ordning. */
+export function householdPercents(data: AppData, period: Period): number[] {
+  const ids = data.persons.map((p) => p.id);
+  const setting = data.settings.householdSplit;
+  const even = evenPercents(ids.length || 1);
+  if (setting?.mode === 'even') return even;
+  if (setting?.mode === 'custom') return percentsFor(setting.percents, ids) ?? even;
+  return incomePercents(budgetIncomes(data, ids, period)) ?? even;
 }
 
 export interface HistoryPoint {

@@ -13,8 +13,9 @@ import {
   type InboxItem,
   type InboxKey,
 } from '../lib/inbox';
+import { householdPercents } from '../lib/calc';
 import { num } from '../lib/format';
-import { todayISO } from '../lib/period';
+import { periodOf, todayISO } from '../lib/period';
 import { InboxContext, useCloud, type InboxValue } from './context';
 import { errorText } from './household';
 import { createInboxKey, deleteInboxItem, inboxUrl, restoreInboxItem, revokeInboxKey, watchInbox } from './inbox';
@@ -64,12 +65,12 @@ export function InboxProvider({ householdId, children }: { householdId: string; 
   const entries = useMemo(() => {
     const owner = new Map(keys.map((k) => [k.key, k.personId]));
     const persons = new Set(data.persons.map((p) => p.id));
+    // Hushållets adress delar köpen – är man ensam i hushållet blir de ens egna
+    const personOf = (pid: string | undefined) =>
+      pid === HOUSEHOLD ? (persons.size > 1 ? HOUSEHOLD : (data.persons[0]?.id ?? null)) : pid && persons.has(pid) ? pid : null;
     return items
       .filter((i) => !hidden.has(i.id))
-      .map((i): InboxEntry => {
-        const pid = owner.get(i.key);
-        return { id: i.id, key: i.key, raw: i.kop, personId: pid && persons.has(pid) ? pid : null, ...parseInboxText(i.kop) };
-      })
+      .map((i): InboxEntry => ({ id: i.id, key: i.key, raw: i.kop, personId: personOf(owner.get(i.key)), ...parseInboxText(i.kop) }))
       .sort((a, b) => (b.date ?? '').localeCompare(a.date ?? '') || a.id.localeCompare(b.id));
   }, [items, keys, hidden, data.persons]);
 
@@ -78,6 +79,15 @@ export function InboxProvider({ householdId, children }: { householdId: string; 
   function hide(entry: InboxEntry, txIds: string[]) {
     setHidden((h) => new Set(h).add(entry.id));
     pending.current.set(entry.id, { item: itemOf(entry), txIds });
+  }
+
+  /** Bokföring med ett tryck: känd handlare och köpet i kronor. */
+  function quickChoice(entry: InboxEntry): InboxChoice | null {
+    const match = findMerchantRule(data.merchants, entry.merchant);
+    if (!match || entry.currency) return null;
+    const today = todayISO();
+    const split = householdPercents(data, periodOf(entry.date ?? today, data.settings.periodStartDay));
+    return ruleChoice(entry, match.rule, split, today);
   }
 
   function book(entry: InboxEntry, choice: InboxChoice): Booked {
@@ -94,20 +104,12 @@ export function InboxProvider({ householdId, children }: { householdId: string; 
       source: 'wallet',
     });
 
-    if (entry.merchant) {
-      const split = shared && choice.percents ? Object.fromEntries(personIds.map((id, i) => [id, choice.percents![i]])) : undefined;
-      const known = data.merchants[merchantKey(entry.merchant)];
-      const same =
-        known &&
-        known.lineKey === choice.line.key &&
-        known.shared === shared &&
-        JSON.stringify(known.split ?? null) === JSON.stringify(split ?? null);
-      if (!same) {
-        dispatch({
-          type: 'rememberMerchant',
-          rule: { name: entry.merchant, lineKey: choice.line.key, section: choice.line.section, lineName: choice.line.name, shared, split },
-        });
-      }
+    // Appen minns bara kategorin – vems köpet är avgörs av kortet
+    if (entry.merchant && data.merchants[merchantKey(entry.merchant)]?.lineKey !== choice.line.key) {
+      dispatch({
+        type: 'rememberMerchant',
+        rule: { name: entry.merchant, lineKey: choice.line.key, section: choice.line.section, lineName: choice.line.name },
+      });
     }
     hide(entry, booked.txIds);
     return booked;
@@ -142,14 +144,12 @@ export function InboxProvider({ householdId, children }: { householdId: string; 
   // Automatisk bokföring av kända handlare
   useEffect(() => {
     if (!loaded || data.settings.inboxAutoBook === false) return;
-    const personIds = data.persons.map((p) => p.id);
     const done: { entry: InboxEntry; choice: InboxChoice; booked: Booked }[] = [];
     for (const entry of entries) {
       if (autoTried.current.has(entry.id)) continue;
-      const match = findMerchantRule(data.merchants, entry.merchant);
       // Bara säkra fall: exakt samma handlare, i kronor, med belopp och datum
-      if (!match?.exact || !entry.date || entry.currency || !entry.amount || entry.amount < 0) continue;
-      const choice = ruleChoice(entry, match.rule, personIds, todayISO());
+      if (!findMerchantRule(data.merchants, entry.merchant)?.exact || !entry.date || !entry.amount || entry.amount < 0) continue;
+      const choice = quickChoice(entry);
       if (!choice) continue;
       autoTried.current.add(entry.id);
       done.push({ entry, choice, booked: book(entry, choice) });
@@ -169,6 +169,7 @@ export function InboxProvider({ householdId, children }: { householdId: string; 
     keys,
     error,
     suggest: (entry) => findMerchantRule(data.merchants, entry.merchant),
+    quickChoice,
     book,
     discard: (entry) => hide(entry, []),
     undo,

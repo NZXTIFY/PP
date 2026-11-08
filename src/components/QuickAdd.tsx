@@ -6,13 +6,14 @@ import { useUi, type QuickAddState } from '../store/ui';
 import { bookPurchase } from '../store/book';
 import { useInbox } from '../cloud/context';
 import { useToast } from './Toast';
-import { personMonth, previousMonth } from '../lib/calc';
+import { householdPercents, personMonth, previousMonth } from '../lib/calc';
 import { templateLines } from '../lib/defaults';
 import { evalOr0, evaluate } from '../lib/expr';
 import { num } from '../lib/format';
 import { periodLabel, periodOf, rangeLabel, todayISO } from '../lib/period';
-import { evenPercents, incomePercents, percentsFor, splitAmount } from '../lib/split';
+import { evenPercents, groupPercents, incomePercents, percentsFor, splitAmount, splitGroup } from '../lib/split';
 import { setPrefs, usePrefs } from '../lib/prefs';
+import { SplitSlider } from './SplitSlider';
 
 const ORDER: { id: SectionId; title: string }[] = [
   { id: 'variable', title: 'Rörliga' },
@@ -24,7 +25,7 @@ const ORDER: { id: SectionId; title: string }[] = [
 export function QuickAdd() {
   const { quickAdd, closeQuickAdd } = useUi();
   if (!quickAdd) return null;
-  return <QuickAddSheet initial={quickAdd} onClose={closeQuickAdd} />;
+  return <QuickAddSheet key={quickAdd.edit ?? quickAdd.inbox?.id ?? 'ny'} initial={quickAdd} onClose={closeQuickAdd} />;
 }
 
 function QuickAddSheet({ initial, onClose }: { initial: QuickAddState; onClose(): void }) {
@@ -43,21 +44,31 @@ function QuickAddSheet({ initial, onClose }: { initial: QuickAddState; onClose()
   const entry = initial.inbox;
   const [match] = useState(() => (entry && inbox ? inbox.suggest(entry) : null));
 
-  // Vem köpet gäller: en person eller hela hushållet (delas mellan alla)
+  // Ett loggat köp som ändras – hela köpet, alla delar om det är delat
+  const [original] = useState(() => {
+    const tx = initial.edit ? data.transactions.find((t) => t.id === initial.edit) : undefined;
+    return tx ? splitGroup(data.transactions, tx) : null;
+  });
+  const first = original?.[0];
+  const editing = !!initial.edit;
+
+  // Vem köpet gäller: en person eller hela hushållet (delas mellan alla). Från Apple Pay avgör kortet.
   const [target, setTarget] = useState(() => {
-    if (entry) return match?.rule.shared && multi ? HOUSEHOLD : (entry.personId ?? fallbackPerson);
+    if (first) return first.splitId && multi ? HOUSEHOLD : first.personId;
+    if (entry) return entry.personId ?? fallbackPerson;
     return scope === HOUSEHOLD ? (multi ? HOUSEHOLD : (persons[0]?.id ?? '')) : scope;
   });
-  const [percents, setPercents] = useState<number[]>(
-    () =>
-      (match?.rule.shared ? percentsFor(match.rule.split, personIds) : null) ??
-      percentsFor(prefs.split, personIds) ??
-      evenPercents(persons.length || 1),
-  );
-  const [amount, setAmount] = useState(entry?.amount != null ? String(entry.amount).replace('.', ',') : '');
-  const [lineKey, setLineKey] = useState(initial.lineKey ?? match?.rule.lineKey ?? '');
-  const [note, setNote] = useState(entry?.merchant ?? '');
-  const [date, setDate] = useState(entry?.date ?? todayISO());
+  const [percents, setPercents] = useState<number[]>(() => {
+    if (original && first?.splitId) return groupPercents(original, personIds);
+    // Gemensamma kortet delas enligt hushållets inställning
+    if (entry) return householdPercents(data, periodOf(entry.date ?? todayISO(), startDay));
+    return percentsFor(prefs.split, personIds) ?? evenPercents(persons.length || 1);
+  });
+  const total = original ? original.reduce((s, t) => s + t.amount, 0) : (entry?.amount ?? null);
+  const [amount, setAmount] = useState(total !== null ? String(Math.round(total * 100) / 100).replace('.', ',') : '');
+  const [lineKey, setLineKey] = useState(initial.lineKey ?? first?.lineKey ?? match?.rule.lineKey ?? '');
+  const [note, setNote] = useState(first?.note ?? entry?.merchant ?? '');
+  const [date, setDate] = useState(first?.date ?? entry?.date ?? todayISO());
   const [showAllSections, setShowAllSections] = useState(false);
   const amountRef = useRef<HTMLInputElement>(null);
 
@@ -66,6 +77,11 @@ function QuickAddSheet({ initial, onClose }: { initial: QuickAddState; onClose()
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
+
+  // Köpet har tagits bort (t.ex. på en annan enhet) innan menyn öppnades
+  useEffect(() => {
+    if (editing && !original) onClose();
+  }, [editing, original, onClose]);
 
   const shared = target === HOUSEHOLD;
   const period = periodOf(date || todayISO(), startDay);
@@ -91,6 +107,7 @@ function QuickAddSheet({ initial, onClose }: { initial: QuickAddState; onClose()
     t.lines.filter((l) => l.section === 'income').reduce((s, l) => s + evalOr0(l.budget), 0),
   );
   const byIncome = shared ? incomePercents(incomes) : null;
+  const custom = shared && data.settings.householdSplit?.mode === 'custom' ? householdPercents(data, period) : null;
 
   const preselectedSection = selected?.section;
   const sections = ORDER.filter((s) => s.id === 'variable' || showAllSections || s.id === preselectedSection);
@@ -99,13 +116,15 @@ function QuickAddSheet({ initial, onClose }: { initial: QuickAddState; onClose()
     if (!canSave || !selected) return;
     const line = { key: selected.key, section: selected.section, name: selected.name };
     const split = shared ? percents : undefined;
+    const splitText = shared ? ` – delat ${percents.join('/')}` : '';
+    if (original && first) return saveEdit(line, split, splitText);
+
     const booked =
       entry && inbox
         ? inbox.book(entry, { line, target, percents: split, amount: value!, date, note })
         : bookPurchase(data, dispatch, { personIds: targets.map((t) => t.pid), percents: split, line, amount: value!, date, note });
 
-    if (shared) setPrefs({ split: Object.fromEntries(persons.map((p, i) => [p.id, percents[i]])) });
-    const splitText = shared ? ` – delat ${percents.join('/')}` : '';
+    if (shared && !entry) setPrefs({ split: Object.fromEntries(persons.map((p, i) => [p.id, percents[i]])) });
     const createdText = booked.createdMonths.length ? ` – ${periodLabel(booked.period)} skapad` : '';
     toast(`${num(value!)} kr på ${selected.name}${splitText}${createdText}`);
     if (again) {
@@ -118,6 +137,43 @@ function QuickAddSheet({ initial, onClose }: { initial: QuickAddState; onClose()
     }
   }
 
+  /** Ett ändrat köp bokförs om, med samma id:n så långt det går, och kan ångras. */
+  function saveEdit(line: { key: string; section: SectionId; name: string }, split: number[] | undefined, splitText: string) {
+    if (!original || !first) return;
+    for (const t of original) dispatch({ type: 'removeTransaction', id: t.id });
+    const booked = bookPurchase(data, dispatch, {
+      personIds: targets.map((t) => t.pid),
+      percents: split,
+      line,
+      amount: value!,
+      date,
+      note,
+      idBase: first.splitId ?? first.id,
+      source: first.source,
+      createdAt: first.createdAt,
+    });
+    // Byter man kategori på ett Apple Pay-köp ska nästa köp hos samma handlare hamna där
+    if (first.source === 'wallet' && first.note && line.key !== first.lineKey) {
+      dispatch({ type: 'rememberMerchant', rule: { name: first.note, lineKey: line.key, section: line.section, lineName: line.name } });
+    }
+    toast(`Ändrat: ${num(value!)} kr på ${line.name}${splitText}`, {
+      undo: () => {
+        for (const id of booked.txIds) dispatch({ type: 'removeTransaction', id });
+        for (const tx of original) dispatch({ type: 'addTransaction', tx });
+      },
+    });
+    onClose();
+  }
+
+  function remove() {
+    if (!original) return;
+    for (const t of original) dispatch({ type: 'removeTransaction', id: t.id });
+    toast(original.length > 1 ? 'Delat köp borttaget för alla' : 'Köp borttaget', {
+      undo: () => original.forEach((tx) => dispatch({ type: 'addTransaction', tx })),
+    });
+    onClose();
+  }
+
   return (
     <div className="sheet-backdrop" onClick={onClose}>
       <div
@@ -128,7 +184,7 @@ function QuickAddSheet({ initial, onClose }: { initial: QuickAddState; onClose()
         onClick={(e) => e.stopPropagation()}
       >
         <header className="sheet-head">
-          <h2 id="quickadd-title">{entry ? 'Bokför köp' : 'Logga köp'}</h2>
+          <h2 id="quickadd-title">{editing ? 'Ändra köp' : entry ? 'Bokför köp' : 'Logga köp'}</h2>
           <button className="icon-btn" aria-label="Stäng" onClick={onClose}>
             ×
           </button>
@@ -144,7 +200,7 @@ function QuickAddSheet({ initial, onClose }: { initial: QuickAddState; onClose()
             <span className="sr-only">Belopp</span>
             <input
               ref={amountRef}
-              autoFocus
+              autoFocus={!editing && entry?.amount == null}
               inputMode="decimal"
               autoComplete="off"
               placeholder="0"
@@ -163,6 +219,12 @@ function QuickAddSheet({ initial, onClose }: { initial: QuickAddState; onClose()
               {entry.amount === null && <> – kunde inte läsa beloppet ur ”{entry.raw}”</>}
               {entry.currency && <> – köpet var i {entry.currency}, skriv in vad det blev i kronor</>}
               {match && !match.exact && <> – kategorin är en gissning utifrån liknande butiker</>}
+            </p>
+          )}
+          {first?.source === 'wallet' && (
+            <p className="form-hint">
+              Från Apple Pay
+              {first.note && <> – byter du kategori hamnar nästa köp hos {first.note} där också</>}
             </p>
           )}
 
@@ -204,42 +266,7 @@ function QuickAddSheet({ initial, onClose }: { initial: QuickAddState; onClose()
                 ))}
               </div>
 
-              {persons.length === 2 ? (
-                <input
-                  type="range"
-                  className="split-slider"
-                  min={0}
-                  max={100}
-                  step={1}
-                  value={percents[0]}
-                  aria-label={`${persons[0].name}s andel i procent`}
-                  aria-valuetext={`${persons[0].name} ${percents[0]} %, ${persons[1].name} ${percents[1]} %`}
-                  onChange={(e) => {
-                    // Snäpp till jämna femtal (40/60, 45/55) när man är nära – lätt att träffa med tummen
-                    const raw = Number(e.target.value);
-                    const round = Math.round(raw / 5) * 5;
-                    const v = Math.abs(raw - round) <= 1 ? round : raw;
-                    setPercents([v, 100 - v]);
-                  }}
-                />
-              ) : (
-                <div className="split-inputs">
-                  {persons.map((p, i) => (
-                    <label key={p.id}>
-                      {p.name}
-                      <input
-                        type="number"
-                        min={0}
-                        max={100}
-                        value={percents[i]}
-                        onChange={(e) =>
-                          setPercents(percents.map((x, j) => (j === i ? Math.max(0, Math.min(100, Number(e.target.value) || 0)) : x)))
-                        }
-                      />
-                    </label>
-                  ))}
-                </div>
-              )}
+              <SplitSlider persons={persons} percents={percents} onChange={setPercents} />
               {percentSum !== 100 && <p className="form-error">Andelarna blir {percentSum} %, de måste bli 100 %.</p>}
 
               <div className="split-presets">
@@ -249,6 +276,11 @@ function QuickAddSheet({ initial, onClose }: { initial: QuickAddState; onClose()
                 {byIncome && (
                   <button type="button" className="chip" onClick={() => setPercents(byIncome)}>
                     Efter inkomst ({byIncome.join('/')})
+                  </button>
+                )}
+                {custom && (
+                  <button type="button" className="chip" onClick={() => setPercents(custom)}>
+                    Hushållets ({custom.join('/')})
                   </button>
                 )}
               </div>
@@ -299,7 +331,12 @@ function QuickAddSheet({ initial, onClose }: { initial: QuickAddState; onClose()
           </p>
 
           <div className="sheet-actions">
-            {!entry && (
+            {editing && (
+              <button type="button" className="btn btn-ghost btn-danger sheet-delete" onClick={remove}>
+                Ta bort
+              </button>
+            )}
+            {!entry && !editing && (
               <button type="button" className="btn" disabled={!canSave} onClick={() => save(true)}>
                 Spara & nästa
               </button>

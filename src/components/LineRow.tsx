@@ -159,11 +159,13 @@ function LineDetails({ month, line, onClose }: { month: MonthBudget; line: CLine
           <ul>
             {txs.map((t) => (
               <li key={t.id}>
-                <span>{t.date.slice(5).replace('-', '/')}</span>
-                <span className="tx-note">
-                  {[t.note, t.splitId ? `delat, ${Math.round((t.share ?? 0) * 100)} %` : ''].filter(Boolean).join(' · ') || '–'}
-                </span>
-                <span className="tx-amount">{num(t.amount)}</span>
+                <button className="tx-mini-main" title="Ändra köpet" onClick={() => openQuickAdd({ edit: t.id })}>
+                  <span>{t.date.slice(5).replace('-', '/')}</span>
+                  <span className="tx-note">
+                    {[t.note, t.splitId ? `delat, ${Math.round((t.share ?? 0) * 100)} %` : ''].filter(Boolean).join(' · ') || '–'}
+                  </span>
+                  <span className="tx-amount">{num(t.amount)}</span>
+                </button>
                 <button
                   className="icon-btn"
                   aria-label={t.splitId ? 'Ta bort delat köp' : 'Ta bort köp'}

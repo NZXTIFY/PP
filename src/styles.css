@@ -110,6 +110,11 @@ body {
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
 }
+/* Ingen zoom på telefonen: dubbeltryck zoomar inte (nypzoom stoppas i main.tsx) */
+html {
+  touch-action: manipulation;
+  -webkit-text-size-adjust: 100%;
+}
 h1,
 h2,
 h3 {
@@ -878,11 +883,27 @@ button:focus-visible {
 }
 .tx-mini li {
   display: grid;
-  grid-template-columns: 3.2rem 1fr auto auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
   font-size: 0.9rem;
   font-variant-numeric: tabular-nums;
+}
+.tx-mini-main {
+  display: grid;
+  grid-template-columns: 3.2rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  padding: 4px 0;
+  text-align: left;
+  cursor: pointer;
+}
+.tx-mini-main:hover {
+  background: var(--hover-wash);
 }
 .tx-note {
   color: var(--text-2);
@@ -933,10 +954,6 @@ button:focus-visible {
 }
 .tx-cat {
   font-weight: 550;
-}
-.tx-edit {
-  padding: 10px 0;
-  border-top: 1px solid var(--border);
 }
 
 /* ---------- Snabbregistrering ---------- */
@@ -1053,6 +1070,10 @@ button:focus-visible {
 }
 .sheet-actions .btn {
   padding: 0.7rem 1.2rem;
+}
+.sheet-actions .sheet-delete {
+  margin-right: auto;
+  padding-left: 0.4rem;
 }
 .form-hint {
   font-size: 0.85rem;
@@ -1558,6 +1579,15 @@ button:focus-visible {
 .setting-check input {
   margin-top: 3px;
 }
+.split-setting {
+  margin: 14px 0 4px;
+}
+.split-setting .segmented {
+  margin: 6px 0;
+}
+.split-setting .split-parts {
+  margin-top: 6px;
+}
 .merchant-list,
 .guide {
   margin-top: 12px;
@@ -1607,5 +1637,21 @@ button:focus-visible {
   background: var(--surface-2);
 }
 .guide-copy {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
   margin-top: 6px;
+}
+
+/* Minst 16px i fälten på pekskärm, annars zoomar iPhone in när man trycker i dem.
+   Sist i filen så att den går före de mindre storlekarna ovan. */
+@media (pointer: coarse) {
+  input,
+  select,
+  textarea,
+  .inline-select,
+  .details-grid label input,
+  .details-grid label select {
+    font-size: max(16px, 1em);
+  }
 }

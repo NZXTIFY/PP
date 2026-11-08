@@ -1,7 +1,6 @@
 import type { MerchantRule } from '../types';
 import { HOUSEHOLD } from '../types';
 import { parseMonthWord } from './period';
-import { evenPercents, percentsFor } from './split';
 
 /**
  * Inkorgen för köp från Apple Pay. Genvägen på telefonen skickar en rad text,
@@ -11,6 +10,7 @@ import { evenPercents, percentsFor } from './split';
 /** En adress (nyckel) som genvägen skickar till. Nyckeln avgör vems köpet är. */
 export interface InboxKey {
   key: string;
+  /** Person-id, eller HOUSEHOLD för hushållets gemensamma kort */
   personId: string;
   uid: string;
   createdAt?: { toMillis(): number } | null;
@@ -28,7 +28,7 @@ export interface InboxEntry {
   id: string;
   key: string;
   raw: string;
-  /** null om adressen tagits bort eller personen inte finns längre */
+  /** Person-id, HOUSEHOLD (gemensamma kortet, delas), eller null om adressen tagits bort eller personen inte finns längre */
   personId: string | null;
   amount: number | null;
   /** Valuta om köpet inte var i kronor, t.ex. "EUR" */
@@ -136,7 +136,7 @@ export function findMerchantRule(merchants: Record<string, MerchantRule>, name: 
     .map(([, r]) => r);
   if (!candidates.length) return null;
   // Gissa bara om alla butiker med samma första ord hamnat på samma ställe
-  const same = candidates.every((r) => r.lineKey === candidates[0].lineKey && r.shared === candidates[0].shared);
+  const same = candidates.every((r) => r.lineKey === candidates[0].lineKey);
   return same ? { rule: candidates[0], exact: false } : null;
 }
 
@@ -161,14 +161,17 @@ export interface InboxChoice {
   note: string;
 }
 
-/** Bokföring enligt det appen minns om handlaren. null om köpet saknar något som behövs. */
-export function ruleChoice(entry: InboxEntry, rule: MerchantRule, personIds: string[], today: string): InboxChoice | null {
+/**
+ * Bokföring enligt det appen minns om handlaren. Kortet (adressen) avgör vems köpet är: det
+ * gemensamma kortet delas enligt `split`, ett eget kort hamnar hos personen. null om något saknas.
+ */
+export function ruleChoice(entry: InboxEntry, rule: MerchantRule, split: number[], today: string): InboxChoice | null {
   if (entry.amount === null || !entry.personId) return null;
-  const shared = rule.shared && personIds.length > 1;
+  const shared = entry.personId === HOUSEHOLD;
   return {
     line: { key: rule.lineKey, section: rule.section, name: rule.lineName },
-    target: shared ? HOUSEHOLD : entry.personId,
-    percents: shared ? (percentsFor(rule.split, personIds) ?? evenPercents(personIds.length)) : undefined,
+    target: entry.personId,
+    percents: shared ? split : undefined,
     amount: entry.amount,
     date: entry.date ?? today,
     note: entry.merchant,

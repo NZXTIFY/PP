@@ -38,3 +38,16 @@ export function percentsFor(saved: Record<string, number> | undefined, personIds
   if (!pct.every((n) => typeof n === 'number')) return null;
   return pct.reduce((a, b) => a + b, 0) === 100 ? pct : null;
 }
+
+/** Ett delat köps andelar i procent per person (0 för den som inte är med), justerat så att summan blir 100. */
+export function groupPercents(group: Transaction[], personIds: string[]): number[] {
+  const total = group.reduce((s, t) => s + t.amount, 0);
+  const pct = personIds.map((id) => {
+    const t = group.find((g) => g.personId === id);
+    if (!t) return 0;
+    return Math.round((t.share ?? (total ? t.amount / total : 1 / group.length)) * 100);
+  });
+  const last = pct.findLastIndex((p) => p > 0);
+  if (last !== -1) pct[last] += 100 - pct.reduce((a, b) => a + b, 0);
+  return pct;
+}

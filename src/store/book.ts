@@ -19,6 +19,8 @@ export interface Purchase {
   /** Fasta id:n gör att samma köp inte kan bokföras två gånger (t.ex. från två enheter) */
   idBase?: string;
   source?: Transaction['source'];
+  /** Behålls när ett köp ändras, så att det ligger kvar på samma plats i listan */
+  createdAt?: string;
 }
 
 export interface Booked {
@@ -58,7 +60,7 @@ export function bookPurchase(data: AppData, dispatch: Dispatch<Action>, p: Purch
         amount: amounts[i],
         date: p.date,
         note: p.note.trim(),
-        createdAt: new Date().toISOString(),
+        createdAt: p.createdAt ?? new Date().toISOString(),
         splitId,
         share: shared ? percents[i] / 100 : undefined,
         source: p.source,
